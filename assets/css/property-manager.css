@@ -1,0 +1,113 @@
+.property-search-form {
+    background: #fff;
+    border-radius: 10px;
+    box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+    padding: 2rem;
+    margin-bottom: 2rem;
+}
+
+    .property-search-form .form-label {
+        font-weight: 600;
+        color: #333;
+        margin-bottom: 0.5rem;
+    }
+
+    .property-search-form .btn-primary {
+        background: linear-gradient(45deg, #007bff, #0056b3);
+        transition: all 0.3s ease;
+    }
+
+        .property-search-form .btn-primary:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 6px 20px rgba(0, 123, 255, 0.3);
+        }
+
+    .property-search-form .btn-outline-secondary {
+        border-radius: 8px;
+        font-weight: 600;
+    }
+
+    .property-search-form .form-control,
+    .property-search-form .form-select {
+        border-radius: 8px;
+        border: 2px solid #e9ecef;
+        padding: 0.75rem 1rem;
+        transition: all 0.3s ease;
+    }
+
+        .property-search-form .form-control:focus,
+        .property-search-form .form-select:focus {
+            border-color: #007bff;
+            box-shadow: 0 0 0 0.2rem rgba(0, 123, 255, 0.25);
+        }
+
+    .property-search-form .input-group-text {
+        background: #f8f9fa;
+        border: 2px solid #e9ecef;
+        border-left: none;
+        border-radius: 0 8px 8px 0;
+    }
+
+    .property-search-form .range-inputs {
+        display: flex;
+        gap: 0.5rem;
+        align-items: center;
+    }
+
+    .property-search-form .range-separator {
+        color: #6c757d;
+        font-weight: bold;
+    }
+
+.search-suggestions {
+    position: absolute;
+    top: 100%;
+    left: 0;
+    right: 0;
+    background: #fff;
+    border: 1px solid #ddd;
+    border-top: none;
+    border-radius: 0 0 8px 8px;
+    max-height: 200px;
+    overflow-y: auto;
+    z-index: 1000;
+    display: none;
+}
+
+    .search-suggestions .suggestion-item {
+        padding: 0.75rem 1rem;
+        cursor: pointer;
+        border-bottom: 1px solid #f8f9fa;
+        transition: background-color 0.2s ease;
+    }
+
+        .search-suggestions .suggestion-item:hover,
+        .search-suggestions .suggestion-item.active {
+            background-color: #f8f9fa;
+        }
+
+        .search-suggestions .suggestion-item:last-child {
+            border-bottom: none;
+        }
+
+.advanced-search-toggle {
+    text-align: center;
+    margin-top: 1rem;
+}
+
+.advanced-search-content {
+    margin-top: 1.5rem;
+    padding-top: 1.5rem;
+    border-top: 2px solid #e9ecef;
+}
+
+@media (max-width: 768px) {
+    .property-search-form {
+        padding: 1rem;
+    }
+
+        .property-search-form .btn {
+            width: 100%;
+            margin-bottom: 0.5rem;
+        }
+}

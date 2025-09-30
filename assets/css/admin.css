@@ -1,0 +1,182 @@
+/*********************** Dashboard **************************/
+.property-manager-dashboard {
+    margin-top: 20px;
+}
+
+.dashboard-widgets {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 20px;
+}
+
+.dashboard-widget {
+    background: #fff;
+    border: 1px solid #ccd0d4;
+    box-shadow: 0 1px 1px rgba(0,0,0,.04);
+    padding: 20px;
+}
+
+    .dashboard-widget h3 {
+        margin-top: 0;
+        margin-bottom: 15px;
+    }
+
+.stats-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 15px;
+    margin-bottom: 20px;
+}
+
+.stat-box {
+    text-align: center;
+    padding: 15px;
+    background: #f9f9f9;
+    border-radius: 4px;
+}
+
+.stat-number {
+    font-size: 24px;
+    font-weight: bold;
+    color: #0073aa;
+}
+
+.stat-label {
+    font-size: 12px;
+    color: #666;
+}
+
+.status-completed {
+    color: #46b450;
+}
+
+.status-failed {
+    color: #dc3232;
+}
+
+.status-started {
+    color: #ffb900;
+}
+
+.image-actions button {
+    margin-right: 10px;
+}
+
+.quick-actions {
+    display: flex;
+    gap: 10px;
+    flex-wrap: wrap;
+}
+
+
+/*********************** Images **************************/
+
+.image-stats-cards {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 20px;
+    margin: 20px 0;
+}
+
+.stats-card {
+    background: #fff;
+    border: 1px solid #ccd0d4;
+    border-radius: 4px;
+    padding: 20px;
+    text-align: center;
+    box-shadow: 0 1px 1px rgba(0,0,0,.04);
+}
+
+    .stats-card.downloaded {
+        border-left: 4px solid #46b450;
+    }
+
+    .stats-card.pending {
+        border-left: 4px solid #ffb900;
+    }
+
+    .stats-card.failed {
+        border-left: 4px solid #dc3232;
+    }
+
+.stats-number {
+    font-size: 32px;
+    font-weight: bold;
+    color: #0073aa;
+    margin-bottom: 5px;
+}
+
+.stats-label {
+    font-size: 14px;
+    color: #666;
+}
+
+.image-actions-section {
+    background: #fff;
+    border: 1px solid #ccd0d4;
+    border-radius: 4px;
+    padding: 20px;
+    margin: 20px 0;
+}
+
+    .image-actions-section h2 {
+        margin-top: 0;
+    }
+
+    .image-actions-section form {
+        margin-right: 10px;
+    }
+
+.pending-images-section, .failed-images-section {
+    margin: 20px 0;
+}
+
+
+/*********************** Properties *************************/
+.property-descriptions .description-tab-nav {
+    border-bottom: 1px solid #ccc;
+    margin-bottom: 15px;
+}
+
+.property-descriptions .tab-button {
+    background: none;
+    border: none;
+    padding: 8px 16px;
+    cursor: pointer;
+    border-bottom: 2px solid transparent;
+}
+
+    .property-descriptions .tab-button.active {
+        border-bottom-color: #0073aa;
+        color: #0073aa;
+    }
+
+.property-descriptions .tab-pane {
+    display: none;
+}
+
+    .property-descriptions .tab-pane.active {
+        display: block;
+    }
+
+.feature-item, .image-item {
+    margin-bottom: 10px;
+    padding: 10px;
+    border: 1px solid #ddd;
+    border-radius: 4px;
+    background: #f9f9f9;
+}
+
+    .feature-item input, .image-item input {
+        margin-bottom: 5px;
+    }
+
+    .image-item img {
+        display: block;
+        margin-bottom: 10px;
+    }
+
+#property-images {
+    max-height: 400px;
+    overflow-y: auto;
+}

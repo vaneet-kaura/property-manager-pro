@@ -13,58 +13,58 @@ if (!defined('ABSPATH')) {
 class PropertyManager_Database {
     
     private static $instance = null;
-    
+
     public static function get_instance() {
         if (null === self::$instance) {
             self::$instance = new self();
         }
         return self::$instance;
     }
-    
+
     private function __construct() {
-        // Hook cleanup to cron
         add_action('property_manager_cleanup', array($this, 'scheduled_cleanup'));
     }
-    
-    /**
-     * Scheduled cleanup task
-     */
+
     public function scheduled_cleanup() {
-        // Clean up orphaned records
-        self::cleanup_orphaned_records();
-        
-        // Clean up old last viewed records (older than 30 days)
         global $wpdb;
-        $last_viewed_table = self::get_table_name('last_viewed');
-        $wpdb->query("DELETE FROM $last_viewed_table WHERE viewed_at < DATE_SUB(NOW(), INTERVAL 30 DAY)");
-        
-        // Clean up old email logs (older than 90 days)
-        $email_logs_table = self::get_table_name('email_logs');
-        $wpdb->query("DELETE FROM $email_logs_table WHERE created_at < DATE_SUB(NOW(), INTERVAL 90 DAY)");
-        
-        // Clean up old import logs (keep last 100)
-        $import_logs_table = self::get_table_name('import_logs');
-        $wpdb->query("
-            DELETE FROM $import_logs_table 
-            WHERE id NOT IN (
-                SELECT id FROM (
-                    SELECT id FROM $import_logs_table 
-                    ORDER BY started_at DESC 
-                    LIMIT 100
-                ) as keep_logs
-            )
-        ");
-    }
     
-    /**
-     * Create all plugin database tables
-     */
+        $wpdb->query('START TRANSACTION');
+    
+        try {
+            $this->cleanup_orphaned_records();
+        
+            $last_viewed_table = self::get_table_name('last_viewed');
+            $wpdb->query("DELETE FROM $last_viewed_table WHERE viewed_at < DATE_SUB(NOW(), INTERVAL 30 DAY)");
+        
+            $email_logs_table = self::get_table_name('email_logs');
+            $wpdb->query("DELETE FROM $email_logs_table WHERE created_at < DATE_SUB(NOW(), INTERVAL 90 DAY)");
+        
+            $import_logs_table = self::get_table_name('import_logs');
+            $keep_ids = $wpdb->get_col($wpdb->prepare(
+                "SELECT id FROM $import_logs_table ORDER BY started_at DESC LIMIT %d",
+                100
+            ));
+        
+            if (!empty($keep_ids)) {
+                $placeholders = implode(',', array_fill(0, count($keep_ids), '%d'));
+                $wpdb->query($wpdb->prepare(
+                    "DELETE FROM $import_logs_table WHERE id NOT IN ($placeholders)",
+                    $keep_ids
+                ));
+            }
+        
+            $wpdb->query('COMMIT');
+        } catch (Exception $e) {
+            $wpdb->query('ROLLBACK');
+            error_log('Property Manager cleanup error: ' . $e->getMessage());
+        }
+    }
+
     public static function create_tables() {
         global $wpdb;
-        
+    
         $charset_collate = $wpdb->get_charset_collate();
-        
-        // Properties table
+    
         $properties_table = $wpdb->prefix . 'pm_properties';
         $properties_sql = "CREATE TABLE $properties_table (
             id bigint(20) unsigned NOT NULL AUTO_INCREMENT,
@@ -116,8 +116,7 @@ class PropertyManager_Database {
             KEY featured (featured),
             KEY location (latitude,longitude)
         ) $charset_collate;";
-        
-        // Property images table
+    
         $images_table = $wpdb->prefix . 'pm_property_images';
         $images_sql = "CREATE TABLE $images_table (
             id bigint(20) unsigned NOT NULL AUTO_INCREMENT,
@@ -138,8 +137,7 @@ class PropertyManager_Database {
             KEY sort_order (sort_order),
             KEY download_status (download_status)
         ) $charset_collate;";
-        
-        // Property features table
+    
         $features_table = $wpdb->prefix . 'pm_property_features';
         $features_sql = "CREATE TABLE $features_table (
             id bigint(20) unsigned NOT NULL AUTO_INCREMENT,
@@ -151,8 +149,7 @@ class PropertyManager_Database {
             KEY property_id (property_id),
             KEY feature_name (feature_name)
         ) $charset_collate;";
-        
-        // User favorites table
+    
         $favorites_table = $wpdb->prefix . 'pm_user_favorites';
         $favorites_sql = "CREATE TABLE $favorites_table (
             id bigint(20) unsigned NOT NULL AUTO_INCREMENT,
@@ -164,8 +161,7 @@ class PropertyManager_Database {
             KEY user_id (user_id),
             KEY property_id (property_id)
         ) $charset_collate;";
-        
-        // Saved searches table
+    
         $saved_searches_table = $wpdb->prefix . 'pm_saved_searches';
         $saved_searches_sql = "CREATE TABLE $saved_searches_table (
             id bigint(20) unsigned NOT NULL AUTO_INCREMENT,
@@ -183,8 +179,7 @@ class PropertyManager_Database {
             KEY status (status),
             KEY alert_frequency (alert_frequency)
         ) $charset_collate;";
-        
-        // Property alerts table
+    
         $alerts_table = $wpdb->prefix . 'pm_property_alerts';
         $alerts_sql = "CREATE TABLE $alerts_table (
             id bigint(20) unsigned NOT NULL AUTO_INCREMENT,
@@ -207,8 +202,7 @@ class PropertyManager_Database {
             KEY email_verified (email_verified),
             UNIQUE KEY unsubscribe_token (unsubscribe_token)
         ) $charset_collate;";
-        
-        // Last viewed properties table
+    
         $last_viewed_table = $wpdb->prefix . 'pm_last_viewed';
         $last_viewed_sql = "CREATE TABLE $last_viewed_table (
             id bigint(20) unsigned NOT NULL AUTO_INCREMENT,
@@ -222,8 +216,7 @@ class PropertyManager_Database {
             KEY property_id (property_id),
             KEY viewed_at (viewed_at)
         ) $charset_collate;";
-        
-        // Property inquiries table
+    
         $inquiries_table = $wpdb->prefix . 'pm_property_inquiries';
         $inquiries_sql = "CREATE TABLE $inquiries_table (
             id bigint(20) unsigned NOT NULL AUTO_INCREMENT,
@@ -243,8 +236,7 @@ class PropertyManager_Database {
             KEY status (status),
             KEY created_at (created_at)
         ) $charset_collate;";
-        
-        // Email logs table
+    
         $email_logs_table = $wpdb->prefix . 'pm_email_logs';
         $email_logs_sql = "CREATE TABLE $email_logs_table (
             id bigint(20) unsigned NOT NULL AUTO_INCREMENT,
@@ -262,8 +254,7 @@ class PropertyManager_Database {
             KEY status (status),
             KEY sent_at (sent_at)
         ) $charset_collate;";
-        
-        // Import log table
+    
         $import_logs_table = $wpdb->prefix . 'pm_import_logs';
         $import_logs_sql = "CREATE TABLE $import_logs_table (
             id bigint(20) unsigned NOT NULL AUTO_INCREMENT,
@@ -280,10 +271,9 @@ class PropertyManager_Database {
             KEY status (status),
             KEY started_at (started_at)
         ) $charset_collate;";
-        
+    
         require_once(ABSPATH . 'wp-admin/includes/upgrade.php');
-        
-        // Create tables
+    
         dbDelta($properties_sql);
         dbDelta($images_sql);
         dbDelta($features_sql);
@@ -294,18 +284,13 @@ class PropertyManager_Database {
         dbDelta($inquiries_sql);
         dbDelta($email_logs_sql);
         dbDelta($import_logs_sql);
-        
-        // Update database version
+    
         update_option('property_manager_db_version', PROPERTY_MANAGER_VERSION);
     }
-    
-    /**
-     * Drop all plugin database tables
-     */
+
     public static function drop_tables() {
         global $wpdb;
-        
-        // Drop in reverse order to avoid reference issues
+    
         $tables = array(
             $wpdb->prefix . 'pm_import_logs',
             $wpdb->prefix . 'pm_email_logs',
@@ -318,32 +303,25 @@ class PropertyManager_Database {
             $wpdb->prefix . 'pm_property_images',
             $wpdb->prefix . 'pm_properties'
         );
-        
+    
         foreach ($tables as $table) {
             $wpdb->query("DROP TABLE IF EXISTS $table");
         }
-        
+    
         delete_option('property_manager_db_version');
     }
-    
-    /**
-     * Check if database needs update
-     */
+
     public static function maybe_update_database() {
         $current_version = get_option('property_manager_db_version');
-        
+    
         if (version_compare($current_version, PROPERTY_MANAGER_VERSION, '<')) {
             self::create_tables();
         }
     }
-    
-    /**
-     * Clean up orphaned records when property is deleted
-     */
+
     public static function cleanup_property_data($property_id) {
         global $wpdb;
-        
-        // Clean up related records when a property is deleted
+    
         $tables_to_clean = array(
             'pm_property_images',
             'pm_property_features', 
@@ -351,151 +329,99 @@ class PropertyManager_Database {
             'pm_last_viewed',
             'pm_property_inquiries'
         );
-        
+    
         foreach ($tables_to_clean as $table_name) {
             $table = self::get_table_name(str_replace('pm_', '', $table_name));
-            $wpdb->delete($table, array('property_id' => $property_id));
+            $wpdb->delete($table, array('property_id' => $property_id), array('%d'));
         }
-        
+    
         return true;
     }
-    
-    /**
-     * Clean up orphaned records (run periodically)
-     */
+
     public static function cleanup_orphaned_records() {
         global $wpdb;
-        
+    
         $properties_table = self::get_table_name('properties');
-        
-        // Clean up orphaned images
+    
         $images_table = self::get_table_name('property_images');
-        $wpdb->query("
-            DELETE pi FROM $images_table pi 
-            LEFT JOIN $properties_table p ON pi.property_id = p.id 
-            WHERE p.id IS NULL
-        ");
-        
-        // Clean up orphaned features
+        $wpdb->query("DELETE pi FROM $images_table pi LEFT JOIN $properties_table p ON pi.property_id = p.id WHERE p.id IS NULL");
+    
         $features_table = self::get_table_name('property_features');
-        $wpdb->query("
-            DELETE pf FROM $features_table pf 
-            LEFT JOIN $properties_table p ON pf.property_id = p.id 
-            WHERE p.id IS NULL
-        ");
-        
-        // Clean up orphaned favorites
+        $wpdb->query("DELETE pf FROM $features_table pf LEFT JOIN $properties_table p ON pf.property_id = p.id WHERE p.id IS NULL");
+    
         $favorites_table = self::get_table_name('user_favorites');
-        $wpdb->query("
-            DELETE uf FROM $favorites_table uf 
-            LEFT JOIN $properties_table p ON uf.property_id = p.id 
-            WHERE p.id IS NULL
-        ");
-        
-        // Clean up orphaned last viewed
+        $wpdb->query("DELETE uf FROM $favorites_table uf LEFT JOIN $properties_table p ON uf.property_id = p.id WHERE p.id IS NULL");
+    
         $last_viewed_table = self::get_table_name('last_viewed');
-        $wpdb->query("
-            DELETE lv FROM $last_viewed_table lv 
-            LEFT JOIN $properties_table p ON lv.property_id = p.id 
-            WHERE p.id IS NULL
-        ");
-        
-        // Clean up orphaned inquiries
+        $wpdb->query("DELETE lv FROM $last_viewed_table lv LEFT JOIN $properties_table p ON lv.property_id = p.id WHERE p.id IS NULL");
+    
         $inquiries_table = self::get_table_name('property_inquiries');
-        $wpdb->query("
-            DELETE pi FROM $inquiries_table pi 
-            LEFT JOIN $properties_table p ON pi.property_id = p.id 
-            WHERE p.id IS NULL
-        ");
-        
+        $wpdb->query("DELETE pi FROM $inquiries_table pi LEFT JOIN $properties_table p ON pi.property_id = p.id WHERE p.id IS NULL");
+    
         return true;
     }
-    
-    /**
-     * Get table name with prefix
-     */
+
     public static function get_table_name($table) {
         global $wpdb;
         return $wpdb->prefix . 'pm_' . $table;
     }
-    
-    /**
-     * Insert or update property
-     */
+
     public static function upsert_property($data) {
         global $wpdb;
-        
+    
         $table = self::get_table_name('properties');
-        
-        // Check if property exists
+    
         $existing = $wpdb->get_row($wpdb->prepare(
             "SELECT id FROM $table WHERE property_id = %s",
             $data['property_id']
         ));
-        
+    
         if ($existing) {
-            // Update existing property
             $data['updated_at'] = current_time('mysql');
-            $result = $wpdb->update(
-                $table,
-                $data,
-                array('property_id' => $data['property_id'])
-            );
+            $wpdb->update($table, $data, array('property_id' => $data['property_id']));
             return $existing->id;
         } else {
-            // Insert new property
             $data['created_at'] = current_time('mysql');
             $data['updated_at'] = current_time('mysql');
             $result = $wpdb->insert($table, $data);
-            
+        
             if ($result !== false) {
                 return $wpdb->insert_id;
             }
         }
-        
+    
         return false;
     }
-    
-    /**
-     * Delete property and all related data
-     */
+
     public static function delete_property($property_id) {
         global $wpdb;
-        
+    
         $table = self::get_table_name('properties');
-        
-        // First clean up related data
+    
         self::cleanup_property_data($property_id);
-        
-        // Then delete the property
-        $result = $wpdb->delete($table, array('id' => $property_id));
-        
+    
+        $result = $wpdb->delete($table, array('id' => $property_id), array('%d'));
+    
         return $result !== false;
     }
-    
-    /**
-     * Insert property images with proper cleanup
-     */
+
     public static function insert_property_images($property_id, $images) {
         global $wpdb;
-        
+    
         $table = self::get_table_name('property_images');
-        
-        // Verify property exists first
+    
         $properties_table = self::get_table_name('properties');
         $property_exists = $wpdb->get_var($wpdb->prepare(
             "SELECT COUNT(*) FROM $properties_table WHERE id = %d",
             $property_id
         ));
-        
+    
         if (!$property_exists) {
             return false;
         }
-        
-        // Delete existing images for this property
-        $wpdb->delete($table, array('property_id' => $property_id));
-        
-        // Insert new images
+    
+        $wpdb->delete($table, array('property_id' => $property_id), array('%d'));
+    
         foreach ($images as $image) {
             $wpdb->insert($table, array(
                 'property_id' => $property_id,
@@ -507,103 +433,91 @@ class PropertyManager_Database {
                 'sort_order' => isset($image['sort_order']) ? $image['sort_order'] : 0,
                 'download_status' => 'pending',
                 'created_at' => current_time('mysql')
-            ));
+            ), array('%d', '%d', '%s', '%s', '%s', '%s', '%d', '%s', '%s'));
         }
-        
+    
         return true;
     }
-    
-    /**
-     * Insert property features with proper cleanup
-     */
+
     public static function insert_property_features($property_id, $features) {
         global $wpdb;
-        
+    
         $table = self::get_table_name('property_features');
-        
-        // Verify property exists first
+    
         $properties_table = self::get_table_name('properties');
         $property_exists = $wpdb->get_var($wpdb->prepare(
             "SELECT COUNT(*) FROM $properties_table WHERE id = %d",
             $property_id
         ));
-        
+    
         if (!$property_exists) {
             return false;
         }
-        
-        // Delete existing features for this property
-        $wpdb->delete($table, array('property_id' => $property_id));
-        
-        // Insert new features
+    
+        $wpdb->delete($table, array('property_id' => $property_id), array('%d'));
+    
         foreach ($features as $feature) {
             $wpdb->insert($table, array(
                 'property_id' => $property_id,
                 'feature_name' => $feature,
                 'created_at' => current_time('mysql')
-            ));
+            ), array('%d', '%s', '%s'));
         }
-        
+    
         return true;
     }
-    
-    /**
-     * Update image attachment ID after download
-     */
+
     public static function update_image_attachment($image_id, $attachment_id, $local_url = null) {
         global $wpdb;
-        
+    
         $table = self::get_table_name('property_images');
-        
+    
         $update_data = array(
             'attachment_id' => $attachment_id,
             'download_status' => 'downloaded',
             'updated_at' => current_time('mysql')
         );
-        
+    
+        $format = array('%d', '%s', '%s');
+    
         if ($local_url) {
             $update_data['image_url'] = $local_url;
+            $format[] = '%s';
         }
-        
-        return $wpdb->update(
-            $table,
-            $update_data,
-            array('id' => $image_id)
-        );
-    }
     
-    /**
-     * Mark image download as failed
-     */
+        return $wpdb->update($table, $update_data, array('id' => $image_id), $format, array('%d'));
+    }
+
     public static function mark_image_failed($image_id, $error_message = null) {
         global $wpdb;
-        
+    
         $table = self::get_table_name('property_images');
-        
+    
         return $wpdb->update(
             $table,
             array(
                 'download_status' => 'failed',
                 'updated_at' => current_time('mysql')
             ),
-            array('id' => $image_id)
+            array('id' => $image_id),
+            array('%s', '%s'),
+            array('%d')
         );
     }
-    
-    /**
-     * Get pending images for download
-     */
+
     public static function get_pending_images($limit = 50) {
         global $wpdb;
-        
+    
         $table = self::get_table_name('property_images');
-        
+        $properties_table = self::get_table_name('properties');
+    
         return $wpdb->get_results($wpdb->prepare(
-            "SELECT * FROM $table WHERE download_status = 'pending' ORDER BY created_at ASC LIMIT %d",
+            "SELECT pi.* FROM $table pi 
+             INNER JOIN $properties_table p ON pi.property_id = p.id 
+             WHERE pi.download_status = 'pending' AND p.status = 'active'
+             ORDER BY pi.created_at ASC 
+             LIMIT %d",
             $limit
         ));
     }
 }
-
-// Initialize database updates check
-add_action('plugins_loaded', array('PropertyManager_Database', 'maybe_update_database'));

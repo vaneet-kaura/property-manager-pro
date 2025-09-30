@@ -79,12 +79,13 @@ class PropertyManager_Property {
     /**
      * Get property images
      */
-    public function get_property_images($property_id) {
+    public function get_property_images($property_id, $active_only = false) {
         global $wpdb;
         
-        $table = PropertyManager_Database::get_table_name('property_images');
-        
+        $table = PropertyManager_Database::get_table_name('property_images');        
         $images = $wpdb->get_results($wpdb->prepare(
+            $active_only ? 
+            "SELECT * FROM $table WHERE property_id = %d AND attachment_id IS NOT NULL ORDER BY sort_order ASC" :
             "SELECT * FROM $table WHERE property_id = %d ORDER BY sort_order ASC",
             $property_id
         ));
@@ -200,13 +201,13 @@ class PropertyManager_Property {
             'featured' => null,
             'price_freq' => null,
             'currency' => null,
+            'status' => 'active',
             'keyword' => null
         );
         
         $args = wp_parse_args($args, $defaults);
-        
+        $where_clauses[] = "1=1";
         $table = PropertyManager_Database::get_table_name('properties');
-        $where_clauses = array("status = 'active'");
         $where_values = array();
         
         // Price range
@@ -300,6 +301,12 @@ class PropertyManager_Property {
             $where_values[] = $args['price_freq'];
         }
         
+        // Property Status
+        if (!empty($args['status']) && $args['status'] != "all") {
+            $where_clauses[] = "status = %s";
+            $where_values[] = $args['status'];
+        }
+        
         // Keyword search
         if (!empty($args['keyword'])) {
             $where_clauses[] = "(title LIKE %s OR description_en LIKE %s OR description_es LIKE %s OR ref LIKE %s OR town LIKE %s OR province LIKE %s)";
@@ -337,7 +344,7 @@ class PropertyManager_Property {
         
         // Add images to each property
         foreach ($properties as &$property) {
-            $property->images = $this->get_property_images($property->id);
+            $property->images = $this->get_property_images($property->id, true);
             $property->features = $this->get_property_features($property->id);
         }
         

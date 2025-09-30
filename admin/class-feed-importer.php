@@ -213,8 +213,14 @@ class PropertyManager_FeedImporter {
             $longitude = (string) $property_xml->location->longitude;
             
             // Parse coordinates if in DMS format
-            $data['latitude'] = $this->parse_coordinate($latitude);
-            $data['longitude'] = $this->parse_coordinate($longitude);
+            if(empty($longitude) && str_contains($latitude, " ")) {
+                [$lat_str, $lon_str] = preg_split('/\s+/', $latitude, 2);
+                $data['latitude'] = $this->parse_coordinate($lat_str);
+                $data['longitude'] = $this->parse_coordinate($lon_str);
+            } else {
+                $data['latitude'] = $this->parse_coordinate($latitude);
+                $data['longitude'] = $this->parse_coordinate($longitude);
+            }
         }
         
         // Surface area
@@ -236,15 +242,6 @@ class PropertyManager_FeedImporter {
         // URLs
         if (isset($property_xml->url->en)) {
             $data['url_en'] = (string) $property_xml->url->en;
-        }
-        if (isset($property_xml->url->es)) {
-            $data['url_es'] = (string) $property_xml->url->es;
-        }
-        if (isset($property_xml->url->de)) {
-            $data['url_de'] = (string) $property_xml->url->de;
-        }
-        if (isset($property_xml->url->fr)) {
-            $data['url_fr'] = (string) $property_xml->url->fr;
         }
         
         // Descriptions

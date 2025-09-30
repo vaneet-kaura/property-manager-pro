@@ -366,7 +366,7 @@ class PropertyManager_Search {
         // Add images to each property
         foreach ($properties as &$property) {
             $property_manager = PropertyManager_Property::get_instance();
-            $property->images = $property_manager->get_property_images($property->id);
+            $property->images = $property_manager->get_property_images($property->id, true);
             $property->features = $property_manager->get_property_features($property->id);
         }
         
