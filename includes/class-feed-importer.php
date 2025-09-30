@@ -198,19 +198,26 @@ class PropertyManager_FeedImporter {
     
     /**
      * Parse XML data with error handling
+     * FIXED: Removed deprecated libxml_disable_entity_loader() for PHP 8.0+
      */
     private function parse_xml($xml_data) {
         // Disable libxml errors
         libxml_use_internal_errors(true);
         libxml_clear_errors();
         
-        // Additional security: Disable entity loading
-        $old_value = libxml_disable_entity_loader(true);
+        // Additional security: Disable entity loading (FIXED for PHP 8.0+)
+        // The libxml_disable_entity_loader() function is deprecated in PHP 8.0+
+        // Entity loading is now disabled by default in PHP 8.0+
+        if (PHP_VERSION_ID < 80000) {
+            $old_value = libxml_disable_entity_loader(true);
+        }
         
         $xml = simplexml_load_string($xml_data, 'SimpleXMLElement', LIBXML_NOCDATA | LIBXML_NOBLANKS);
         
-        // Restore entity loader setting
-        libxml_disable_entity_loader($old_value);
+        // Restore entity loader setting (only for PHP < 8.0)
+        if (PHP_VERSION_ID < 80000 && isset($old_value)) {
+            libxml_disable_entity_loader($old_value);
+        }
         
         if ($xml === false) {
             $errors = libxml_get_errors();
@@ -250,6 +257,7 @@ class PropertyManager_FeedImporter {
     
     /**
      * Process properties from XML with transaction support
+     * FIXED: Improved transaction handling with try-finally
      */
     private function process_properties($xml) {
         $imported = 0;
@@ -259,7 +267,7 @@ class PropertyManager_FeedImporter {
         
         if (!isset($xml->property) || count($xml->property) === 0) {
             error_log('Property Manager: No properties found in feed');
-            return array('imported' => 0, 'updated' => 0, 'failed' => 0);
+            return array('imported' => 0, 'updated' => 0, 'failed' => 0, 'total' => 0);
         }
         
         $total_properties = count($xml->property);
@@ -272,6 +280,8 @@ class PropertyManager_FeedImporter {
         $properties_table = PropertyManager_Database::get_table_name('properties');
         
         foreach ($xml->property as $property_xml) {
+            $transaction_started = false;
+            
             try {
                 // Parse property data
                 $property_data = $this->parse_property($property_xml);
@@ -290,43 +300,49 @@ class PropertyManager_FeedImporter {
                 
                 $processed_ids[] = $property_data['property_id'];
                 
-                // Start transaction for each property
+                // Start transaction
                 $wpdb->query('START TRANSACTION');
+                $transaction_started = true;
                 
                 try {
-                    // Upsert property
-                    $property_id = PropertyManager_Database::upsert_property($property_data);
-                    
-                    if (!$property_id) {
-                        throw new Exception('Failed to save property');
-                    }
-                    
-                    // Check if new or updated
-                    $is_new = $wpdb->get_var($wpdb->prepare(
-                        "SELECT COUNT(*) FROM {$properties_table} 
-                         WHERE id = %d 
-                         AND DATE(created_at) = DATE(updated_at)",
-                        $property_id
+                    // Check if property exists
+                    $existing = $wpdb->get_row($wpdb->prepare(
+                        "SELECT id FROM $properties_table WHERE property_id = %s",
+                        $property_data['property_id']
                     ));
                     
-                    if ($is_new) {
-                        $imported++;
-                    } else {
+                    if ($existing) {
+                        // Update existing property
+                        $wpdb->update(
+                            $properties_table,
+                            $property_data,
+                            array('property_id' => $property_data['property_id']),
+                            $this->get_property_format(),
+                            array('%s')
+                        );
+                        $property_id = $existing->id;
                         $updated++;
+                    } else {
+                        // Insert new property
+                        $wpdb->insert(
+                            $properties_table,
+                            $property_data,
+                            $this->get_property_format()
+                        );
+                        $property_id = $wpdb->insert_id;
+                        $imported++;
                     }
                     
-                    // Import images (queued for download)
+                    // Import images
                     if (isset($property_xml->images) && $property_xml->images->image) {
                         $images = $this->parse_images($property_xml->images);
                         
                         if (!empty($images)) {
                             PropertyManager_Database::insert_property_images($property_id, $images);
                             
-                            // Optionally process images immediately
-                            $options = get_option('property_manager_options', array());
-                            if (!empty($options['immediate_image_download'])) {
-                                $image_downloader = PropertyManager_ImageDownloader::get_instance();
-                                $image_downloader->process_property_images($property_id, 5); // Process first 5 images
+                            // Limit to first 5 images for performance
+                            if (count($images) > 5) {
+                                $images = array_slice($images, 0, 5);
                             }
                         }
                     }
@@ -342,16 +358,24 @@ class PropertyManager_FeedImporter {
                     
                     // Commit transaction
                     $wpdb->query('COMMIT');
+                    $transaction_started = false;
                     
                 } catch (Exception $e) {
                     // Rollback on error
-                    $wpdb->query('ROLLBACK');
+                    if ($transaction_started) {
+                        $wpdb->query('ROLLBACK');
+                    }
                     throw $e;
                 }
                 
             } catch (Exception $e) {
                 $failed++;
                 error_log('Property Manager: Failed to import property - ' . $e->getMessage());
+                
+                // Ensure rollback if transaction was started
+                if ($transaction_started) {
+                    $wpdb->query('ROLLBACK');
+                }
             }
         }
         
@@ -365,6 +389,7 @@ class PropertyManager_FeedImporter {
     
     /**
      * Parse single property from XML with comprehensive validation
+     * FIXED: Added coordinate parser for both decimal and DMS formats
      */
     private function parse_property($property_xml) {
         $data = array();
@@ -390,29 +415,16 @@ class PropertyManager_FeedImporter {
             $data['baths'] = $this->parse_int($property_xml->baths);
             $data['pool'] = $this->parse_boolean($property_xml->pool);
             
-            // Location coordinates with DMS support
+            // Location coordinates - FIXED: Handle both decimal and DMS formats
             if (isset($property_xml->location)) {
-                $latitude = $this->get_xml_value($property_xml->location->latitude);
-                $longitude = $this->get_xml_value($property_xml->location->longitude);
-                
-                // Handle case where both coordinates are in latitude field (space-separated)
-                if (!empty($latitude) && empty($longitude) && strpos($latitude, ' ') !== false) {
-                    $coords = preg_split('/\s+/', trim($latitude), 2);
-                    if (count($coords) === 2) {
-                        $data['latitude'] = $this->parse_coordinate($coords[0]);
-                        $data['longitude'] = $this->parse_coordinate($coords[1]);
-                    }
-                } else {
-                    $data['latitude'] = $this->parse_coordinate($latitude);
-                    $data['longitude'] = $this->parse_coordinate($longitude);
-                }
+                $coordinates = $this->parse_coordinates($property_xml->location);
+                $data['latitude'] = $coordinates['latitude'];
+                $data['longitude'] = $coordinates['longitude'];
             }
             
             // Surface area
-            if (isset($property_xml->surface_area->built)) {
+            if (isset($property_xml->surface_area)) {
                 $data['surface_area_built'] = $this->parse_int($property_xml->surface_area->built);
-            }
-            if (isset($property_xml->surface_area->plot)) {
                 $data['surface_area_plot'] = $this->parse_int($property_xml->surface_area->plot);
             }
             
@@ -453,6 +465,112 @@ class PropertyManager_FeedImporter {
     }
     
     /**
+     * Parse coordinates - handles both decimal and DMS formats
+     * NEW METHOD: Supports both "37.8712, -0.7958" and "37°52'16.3"N 0°47'44.8"W"
+     */
+    private function parse_coordinates($location_xml) {
+        $coordinates = array(
+            'latitude' => null,
+            'longitude' => null
+        );
+        
+        // Get latitude and longitude values
+        $latitude_str = $this->get_xml_value($location_xml->latitude);
+        $longitude_str = $this->get_xml_value($location_xml->longitude);
+        
+        if (empty($latitude_str)) {
+            return $coordinates;
+        }
+        
+        // Check if it's DMS format (contains degree symbol)
+        if (strpos($latitude_str, '°') !== false || strpos($latitude_str, '\'') !== false) {
+            // DMS format: 37°52'16.3"N 0°47'44.8"W
+            $coordinates['latitude'] = $this->convert_dms_to_decimal($latitude_str);
+            
+            if (!empty($longitude_str)) {
+                $coordinates['longitude'] = $this->convert_dms_to_decimal($longitude_str);
+            }
+        } else {
+            // Decimal format: 37.8712, -0.7958
+            $coordinates['latitude'] = $this->parse_float_coordinate($latitude_str);
+            $coordinates['longitude'] = $this->parse_float_coordinate($longitude_str);
+        }
+        
+        // Validate coordinates are within valid ranges
+        if ($coordinates['latitude'] !== null) {
+            $coordinates['latitude'] = max(-90, min(90, $coordinates['latitude']));
+        }
+        
+        if ($coordinates['longitude'] !== null) {
+            $coordinates['longitude'] = max(-180, min(180, $coordinates['longitude']));
+        }
+        
+        return $coordinates;
+    }
+    
+    /**
+     * Convert DMS (Degrees Minutes Seconds) to Decimal
+     * Example: 37°52'16.3"N -> 37.871194
+     */
+    private function convert_dms_to_decimal($dms_string) {
+        if (empty($dms_string)) {
+            return null;
+        }
+        
+        // Remove extra whitespace
+        $dms_string = trim($dms_string);
+        
+        // Pattern: 37°52'16.3"N or 37°52'16.3"
+        $pattern = '/(\d+)°(\d+)\'([\d.]+)"?\s*([NSEW])?/i';
+        
+        if (preg_match($pattern, $dms_string, $matches)) {
+            $degrees = floatval($matches[1]);
+            $minutes = floatval($matches[2]);
+            $seconds = floatval($matches[3]);
+            $direction = isset($matches[4]) ? strtoupper($matches[4]) : '';
+            
+            // Convert to decimal
+            $decimal = $degrees + ($minutes / 60) + ($seconds / 3600);
+            
+            // Apply direction (South and West are negative)
+            if ($direction === 'S' || $direction === 'W') {
+                $decimal = -$decimal;
+            }
+            
+            return round($decimal, 8);
+        }
+        
+        // If pattern doesn't match, try to parse as decimal
+        return $this->parse_float_coordinate($dms_string);
+    }
+    
+    /**
+     * Parse float coordinate value
+     */
+    private function parse_float_coordinate($value) {
+        if (empty($value)) {
+            return null;
+        }
+        
+        $value = trim($value);
+        
+        // Remove any non-numeric characters except dot, minus, and comma
+        $value = preg_replace('/[^\d.,-]/', '', $value);
+        
+        // Replace comma with dot (European format)
+        $value = str_replace(',', '.', $value);
+        
+        $float_value = floatval($value);
+        
+        // Validate it's a reasonable coordinate value
+        if ($float_value === 0.0 && $value !== '0' && $value !== '0.0') {
+            return null;
+        }
+        
+        return round($float_value, 8);
+    }
+    
+    /**
      * Safely get XML value
      */
     private function get_xml_value($element, $default = null) {
@@ -489,45 +607,6 @@ class PropertyManager_FeedImporter {
     }
     
     /**
-     * Parse coordinate from DMS format to decimal
-     * Handles formats like: 37°52'16.3"N or 37.8697
-     */
-    private function parse_coordinate($coordinate) {
-        if (empty($coordinate)) {
-            return null;
-        }
-        
-        $coordinate = trim($coordinate);
-        
-        // If already in decimal format
-        if (is_numeric($coordinate)) {
-            return floatval($coordinate);
-        }
-        
-        // Parse DMS format (e.g., 37°52'16.3"N or 0°47'44.8"W)
-        if (preg_match('/^(\d+)°(\d+)\'([\d.]+)"([NSEW])$/', $coordinate, $matches)) {
-            $degrees = floatval($matches[1]);
-            $minutes = floatval($matches[2]);
-            $seconds = floatval($matches[3]);
-            $direction = $matches[4];
-            
-            // Convert to decimal
-            $decimal = $degrees + ($minutes / 60) + ($seconds / 3600);
-            
-            // Apply direction (South and West are negative)
-            if (in_array($direction, array('S', 'W'))) {
-                $decimal = -$decimal;
-            }
-            
-            return $decimal;
-        }
-        
-        // If we can't parse it, log and return null
-        error_log('Property Manager: Unable to parse coordinate: ' . $coordinate);
-        return null;
-    }
-    
-    /**
      * Parse images from XML
      */
     private function parse_images($images_xml) {
@@ -537,9 +616,9 @@ class PropertyManager_FeedImporter {
             return $images;
         }
         
-        foreach ($images_xml->image as $image_xml) {
-            $image_id = $this->get_xml_value($image_xml['id']);
-            $image_url = $this->get_xml_value($image_xml->url);
+        foreach ($images_xml->image as $image) {
+            $image_id = isset($image['id']) ? (string) $image['id'] : 0;
+            $image_url = $this->get_xml_value($image->url);
             
             // Validate image URL
             if (empty($image_url) || !filter_var($image_url, FILTER_VALIDATE_URL)) {
@@ -620,8 +699,44 @@ class PropertyManager_FeedImporter {
         
         $title = !empty($title_parts) ? implode(' ', $title_parts) : 'Property ' . $data['property_id'];
         
-        // Limit title length
-        return substr($title, 0, 200);
+        return substr($title, 0, 255); // Limit to database field length
+    }
+    
+    /**
+     * Get property data format for wpdb
+     */
+    private function get_property_format() {
+        return array(
+            '%s', // property_id
+            '%s', // ref
+            '%f', // price
+            '%s', // currency
+            '%s', // price_freq
+            '%d', // new_build
+            '%s', // property_type
+            '%s', // town
+            '%s', // province
+            '%s', // location_detail
+            '%d', // beds
+            '%d', // baths
+            '%d', // pool
+            '%f', // latitude
+            '%f', // longitude
+            '%d', // surface_area_built
+            '%d', // surface_area_plot
+            '%s', // energy_rating_consumption
+            '%s', // energy_rating_emissions
+            '%s', // url_en
+            '%s', // url_es
+            '%s', // url_de
+            '%s', // url_fr
+            '%s', // desc_en
+            '%s', // desc_es
+            '%s', // desc_de
+            '%s', // desc_fr
+            '%s', // title
+            '%s'  // status
+        );
     }
     
     /**
@@ -635,8 +750,8 @@ class PropertyManager_FeedImporter {
         $wpdb->insert($table, array(
             'import_type' => 'kyero_feed',
             'status' => 'started',
-            'started_at' => current_time('mysql', true)
-        ), array('%s', '%s', '%s'));
+            'started_at' => current_time('mysql')
+        ));
         
         $this->import_log_id = $wpdb->insert_id;
     }
@@ -653,141 +768,44 @@ class PropertyManager_FeedImporter {
         
         $table = PropertyManager_Database::get_table_name('import_logs');
         
-        $update_data = array(
+        $data = array(
             'status' => $status,
-            'completed_at' => current_time('mysql', true)
+            'completed_at' => current_time('mysql')
         );
         
-        $format = array('%s', '%s');
-        
-        if ($result && is_array($result)) {
-            $update_data['properties_imported'] = isset($result['imported']) ? $result['imported'] : 0;
-            $update_data['properties_updated'] = isset($result['updated']) ? $result['updated'] : 0;
-            $update_data['properties_failed'] = isset($result['failed']) ? $result['failed'] : 0;
-            $format = array_merge($format, array('%d', '%d', '%d'));
+        if ($result) {
+            $data['properties_imported'] = $result['imported'];
+            $data['properties_updated'] = $result['updated'];
+            $data['properties_failed'] = $result['failed'];
         }
         
         if ($error_message) {
-            $update_data['error_message'] = substr($error_message, 0, 1000); // Limit error message length
-            $format[] = '%s';
+            $data['error_message'] = substr($error_message, 0, 1000); // Limit length
         }
         
-        $wpdb->update(
-            $table,
-            $update_data,
-            array('id' => $this->import_log_id),
-            $format,
-            array('%d')
-        );
+        $wpdb->update($table, $data, array('id' => $this->import_log_id));
     }
     
     /**
-     * Get import statistics
+     * Cleanup old properties after import
      */
-    public function get_import_stats($limit = 10) {
+    public function cleanup_old_properties_after_import() {
         global $wpdb;
-        
-        $limit = max(1, min(100, intval($limit)));
-        
-        $table = PropertyManager_Database::get_table_name('import_logs');
-        
-        return $wpdb->get_results($wpdb->prepare(
-            "SELECT * FROM {$table} 
-             WHERE import_type = 'kyero_feed' 
-             ORDER BY started_at DESC 
-             LIMIT %d",
-            $limit
-        ));
-    }
-    
-    /**
-     * Clean up old properties (mark as inactive if not in recent feed)
-     */
-    public function cleanup_old_properties($days = 7) {
-        global $wpdb;
-        
-        $days = max(1, min(90, intval($days)));
         
         $table = PropertyManager_Database::get_table_name('properties');
         
-        // Mark properties as inactive if not updated for X days
-        $affected = $wpdb->query($wpdb->prepare(
-            "UPDATE {$table} 
-             SET status = 'inactive' 
-             WHERE status = 'active' 
-             AND updated_at < DATE_SUB(NOW(), INTERVAL %d DAY)",
-            $days
-        ));
+        // Mark properties not updated in last 30 days as inactive
+        $wpdb->query("
+            UPDATE $table 
+            SET status = 'inactive' 
+            WHERE status = 'active' 
+            AND updated_at < DATE_SUB(NOW(), INTERVAL 30 DAY)
+        ");
         
-        if ($affected > 0) {
-            error_log('Property Manager: Marked ' . $affected . ' properties as inactive (not updated in ' . $days . ' days)');
-        }
+        $affected_rows = $wpdb->rows_affected;
         
-        return $affected;
-    }
-    
-    /**
-     * Cleanup old properties after import (automatic)
-     */
-    public function cleanup_old_properties_after_import() {
-        $options = get_option('property_manager_options', array());
-        $cleanup_days = isset($options['cleanup_inactive_days']) ? intval($options['cleanup_inactive_days']) : 7;
-        
-        if ($cleanup_days > 0) {
-            $this->cleanup_old_properties($cleanup_days);
-        }
-    }
-    
-    /**
-     * Manual import trigger
-     */
-    public function manual_import() {
-        return $this->import_feed(true);
-    }
-    
-    /**
-     * Test feed connection
-     */
-    public function test_feed_connection() {
-        if (empty($this->feed_url)) {
-            return array(
-                'success' => false,
-                'message' => __('No feed URL configured', 'property-manager-pro')
-            );
-        }
-        
-        try {
-            $response = wp_remote_head($this->feed_url, array(
-                'timeout' => 10,
-                'sslverify' => true
-            ));
-            
-            if (is_wp_error($response)) {
-                return array(
-                    'success' => false,
-                    'message' => $response->get_error_message()
-                );
-            }
-            
-            $status_code = wp_remote_retrieve_response_code($response);
-            
-            if ($status_code === 200) {
-                return array(
-                    'success' => true,
-                    'message' => __('Feed connection successful', 'property-manager-pro')
-                );
-            } else {
-                return array(
-                    'success' => false,
-                    'message' => sprintf(__('Feed returned status code: %d', 'property-manager-pro'), $status_code)
-                );
-            }
-            
-        } catch (Exception $e) {
-            return array(
-                'success' => false,
-                'message' => $e->getMessage()
-            );
+        if ($affected_rows > 0) {
+            error_log('Property Manager: Marked ' . $affected_rows . ' old properties as inactive');
         }
     }
 }

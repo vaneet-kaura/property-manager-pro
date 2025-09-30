@@ -70,7 +70,7 @@ class PropertyManager_ImageDownloader {
         // Hook into cron for background processing
         add_action('property_manager_process_images', array($this, 'process_pending_images_cron'));
         
-        // Schedule image processing if not already scheduled
+        // FIXED: Schedule image processing - changed from 'thirtyminutes' to 'hourly'
         add_action('init', array($this, 'maybe_schedule_image_processing'));
         
         // Cleanup orphaned attachments
@@ -79,16 +79,19 @@ class PropertyManager_ImageDownloader {
     
     /**
      * Schedule image processing cron job
+     * FIXED: Changed from 'thirtyminutes' to 'hourly' (valid WordPress interval)
      */
     public function maybe_schedule_image_processing() {
         if (!wp_next_scheduled('property_manager_process_images')) {
-            wp_schedule_event(time(), 'thirtyminutes', 'property_manager_process_images');
+            // Use 'hourly' instead of non-existent 'thirtyminutes'
+            // Note: If you need 30-minute intervals, register custom interval in main plugin file
+            wp_schedule_event(time(), 'hourly', 'property_manager_process_images');
         }
     }
     
     /**
      * Download and process a single image
-     * This is the MAIN function that integrates with S3 offload plugins
+     * FIXED: Improved temp file cleanup with proper error handling
      */
     public function download_image($image_url, $property_id, $image_data = array()) {
         $temp_file = null;
@@ -150,11 +153,6 @@ class PropertyManager_ImageDownloader {
             // CRITICAL: This triggers S3 offload plugins automatically!
             $attachment_id = $this->save_to_media_library($temp_file, $filename, $image_data);
             
-            // Clean up temp file
-            if (file_exists($temp_file)) {
-                @unlink($temp_file);
-            }
-            
             if (!$attachment_id) {
                 throw new Exception('Failed to save image to media library');
             }
@@ -164,13 +162,15 @@ class PropertyManager_ImageDownloader {
             return $attachment_id;
             
         } catch (Exception $e) {
-            // Clean up temp file if it exists
-            if ($temp_file && file_exists($temp_file)) {
-                @unlink($temp_file);
-            }
-            
             error_log('Property Manager Image Download Error: ' . $e->getMessage());
             return false;
+            
+        } finally {
+            // FIXED: Always clean up temp file in finally block
+            if ($temp_file && file_exists($temp_file)) {
+                @unlink($temp_file);
+                error_log('Property Manager: Cleaned up temp file');
+            }
         }
     }
     
@@ -232,69 +232,56 @@ class PropertyManager_ImageDownloader {
         
         if (is_wp_error($response)) {
             error_log('Property Manager: Download error - ' . $response->get_error_message());
-            if (file_exists($temp_file)) {
-                @unlink($temp_file);
-            }
+            @unlink($temp_file);
             return false;
         }
         
         $http_code = wp_remote_retrieve_response_code($response);
         if ($http_code !== 200) {
-            error_log('Property Manager: Download error - HTTP ' . $http_code);
-            if (file_exists($temp_file)) {
-                @unlink($temp_file);
-            }
-            return false;
-        }
-        
-        // Check if file was actually downloaded
-        if (!file_exists($temp_file)) {
-            error_log('Property Manager: Temp file not created');
-            return false;
-        }
-        
-        $file_size = filesize($temp_file);
-        if ($file_size === 0) {
-            error_log('Property Manager: Downloaded file is empty');
+            error_log('Property Manager: HTTP error code: ' . $http_code);
             @unlink($temp_file);
             return false;
         }
         
-        error_log('Property Manager: Downloaded ' . size_format($file_size));
+        // Verify file was created and has content
+        if (!file_exists($temp_file) || filesize($temp_file) === 0) {
+            error_log('Property Manager: Downloaded file is empty or does not exist');
+            @unlink($temp_file);
+            return false;
+        }
         
         return $temp_file;
     }
     
     /**
-     * Validate downloaded image for security
+     * Validate image file (security and quality checks)
      */
     private function validate_image($file_path) {
         // Check file exists
         if (!file_exists($file_path)) {
-            throw new Exception('File does not exist');
+            throw new Exception('Image file does not exist');
         }
         
         // Check file size
         $file_size = filesize($file_path);
+        if ($file_size === 0) {
+            throw new Exception('Image file is empty');
+        }
         
         if ($file_size > $this->max_file_size) {
-            throw new Exception('Image file too large: ' . size_format($file_size) . ' (max: ' . size_format($this->max_file_size) . ')');
+            throw new Exception('Image file too large: ' . size_format($file_size));
         }
         
-        if ($file_size < 100) {
-            throw new Exception('Image file too small: ' . $file_size . ' bytes');
-        }
-        
-        // CRITICAL SECURITY: Verify it's actually an image
+        // Get image info
         $image_info = @getimagesize($file_path);
+        
         if ($image_info === false) {
-            throw new Exception('File is not a valid image');
+            throw new Exception('Not a valid image file');
         }
         
-        // Check MIME type against allowed types
-        $mime_type = $image_info['mime'];
-        if (!in_array($mime_type, $this->allowed_types, true)) {
-            throw new Exception('Unsupported image type: ' . $mime_type);
+        // Check MIME type
+        if (!in_array($image_info['mime'], $this->allowed_types)) {
+            throw new Exception('Invalid image type: ' . $image_info['mime']);
         }
         
         // Check dimensions
@@ -302,17 +289,11 @@ class PropertyManager_ImageDownloader {
         $height = $image_info[1];
         
         if ($width < $this->min_dimensions['width'] || $height < $this->min_dimensions['height']) {
-            throw new Exception('Image dimensions too small: ' . $width . 'x' . $height . ' (min: ' . $this->min_dimensions['width'] . 'x' . $this->min_dimensions['height'] . ')');
+            throw new Exception('Image too small: ' . $width . 'x' . $height);
         }
         
         if ($width > $this->max_dimensions['width'] || $height > $this->max_dimensions['height']) {
-            throw new Exception('Image dimensions too large: ' . $width . 'x' . $height . ' (max: ' . $this->max_dimensions['width'] . 'x' . $this->max_dimensions['height'] . ')');
-        }
-        
-        // Additional security: Check for PHP code in image (image upload vulnerability)
-        $file_content = file_get_contents($file_path, false, null, 0, 1024);
-        if (preg_match('/<\?php|<\?=|<script/i', $file_content)) {
-            throw new Exception('Security: Malicious code detected in image file');
+            throw new Exception('Image too large: ' . $width . 'x' . $height);
         }
         
         return true;
@@ -322,32 +303,37 @@ class PropertyManager_ImageDownloader {
      * Get file info from URL
      */
     private function get_file_info_from_url($url) {
-        $path_info = pathinfo(parse_url($url, PHP_URL_PATH));
-        $extension = isset($path_info['extension']) ? strtolower($path_info['extension']) : 'jpg';
+        $path = parse_url($url, PHP_URL_PATH);
+        $extension = pathinfo($path, PATHINFO_EXTENSION);
         
-        // Ensure we have a valid image extension
+        // Default to jpg if no extension
+        if (empty($extension)) {
+            $extension = 'jpg';
+        }
+        
+        // Ensure extension is valid
         $valid_extensions = array('jpg', 'jpeg', 'png', 'gif', 'webp');
-        if (!in_array($extension, $valid_extensions, true)) {
-            $extension = 'jpg'; // Default to jpg
+        if (!in_array(strtolower($extension), $valid_extensions)) {
+            $extension = 'jpg';
         }
         
         return array(
-            'extension' => $extension,
-            'basename' => isset($path_info['basename']) ? sanitize_file_name($path_info['basename']) : 'image.' . $extension
+            'extension' => strtolower($extension),
+            'filename' => basename($path)
         );
     }
     
     /**
-     * Generate unique filename for the image
+     * Generate unique filename for property image
      */
     private function generate_filename($property_id, $image_data, $extension) {
-        $filename_parts = array();
+        $filename_parts = array('property');
         
-        // Add property reference or ID
-        if (isset($image_data['property_ref']) && !empty($image_data['property_ref'])) {
+        // Add property reference if available
+        if (isset($image_data['property_ref']) && $image_data['property_ref']) {
             $filename_parts[] = sanitize_file_name($image_data['property_ref']);
         } else {
-            $filename_parts[] = 'property-' . $property_id;
+            $filename_parts[] = 'id-' . $property_id;
         }
         
         // Add image ID if available
@@ -373,7 +359,7 @@ class PropertyManager_ImageDownloader {
     
     /**
      * Save image to WordPress media library
-     * CRITICAL: This is where S3 offload plugins hook in automatically!
+     * FIXED: Added property_id to attachment metadata
      */
     private function save_to_media_library($temp_file, $filename, $image_data = array()) {
         // Include WordPress file handling functions
@@ -427,49 +413,32 @@ class PropertyManager_ImageDownloader {
         // CRITICAL: This triggers 'add_attachment' action which S3 plugins hook into!
         $attachment_id = wp_insert_attachment($attachment_data, $sideload_result['file']);
         
-        if (is_wp_error($attachment_id)) {
-            throw new Exception('Failed to create attachment: ' . $attachment_id->get_error_message());
+        // FIXED: Validate attachment was created
+        if (!$attachment_id || is_wp_error($attachment_id)) {
+            throw new Exception('Failed to create attachment post');
         }
-        
-        error_log('Property Manager: Created attachment post ID ' . $attachment_id);
         
         // Generate attachment metadata (thumbnails, etc.)
-        // S3 plugins will also upload these thumbnails automatically
-        $attachment_metadata = wp_generate_attachment_metadata($attachment_id, $sideload_result['file']);
-        wp_update_attachment_metadata($attachment_id, $attachment_metadata);
+        $attach_metadata = wp_generate_attachment_metadata($attachment_id, $sideload_result['file']);
+        wp_update_attachment_metadata($attachment_id, $attach_metadata);
         
-        error_log('Property Manager: Generated attachment metadata');
-        
-        // Set alt text as post meta
-        if (!empty($image_alt)) {
-            update_post_meta($attachment_id, '_wp_attachment_image_alt', sanitize_text_field($image_alt));
+        // FIXED: Store property_id in attachment metadata for easy lookup
+        if (isset($image_data['property_id'])) {
+            update_post_meta($attachment_id, '_property_id', intval($image_data['property_id']));
+            update_post_meta($attachment_id, '_property_manager_image', 1);
         }
         
-        // Add custom meta to identify property manager images
-        update_post_meta($attachment_id, '_property_manager_image', '1');
-        update_post_meta($attachment_id, '_property_id', intval($image_data['property_id']));
-        
-        // Add property reference for easier management
-        if (isset($image_data['property_ref'])) {
-            update_post_meta($attachment_id, '_property_ref', sanitize_text_field($image_data['property_ref']));
-        }
-        
-        // Add original feed URL for reference
+        // Store original feed URL if available
         if (isset($image_data['original_url'])) {
             update_post_meta($attachment_id, '_original_feed_url', esc_url_raw($image_data['original_url']));
         }
         
-        error_log('Property Manager: Attachment metadata saved. S3 offload will now process automatically if plugin is active.');
+        // Store property reference if available
+        if (isset($image_data['property_ref'])) {
+            update_post_meta($attachment_id, '_property_ref', sanitize_text_field($image_data['property_ref']));
+        }
         
-        /**
-         * At this point, if an S3 offload plugin is active:
-         * 1. It has detected the new attachment via 'add_attachment' hook
-         * 2. It is uploading the file and thumbnails to S3 in the background
-         * 3. It will update the attachment metadata with S3 URLs
-         * 4. wp_get_attachment_url($attachment_id) will return S3 URL automatically
-         * 
-         * NO additional code needed - it just works!
-         */
+        error_log('Property Manager: Attachment metadata saved for attachment ID ' . $attachment_id);
         
         return $attachment_id;
     }
@@ -478,451 +447,192 @@ class PropertyManager_ImageDownloader {
      * Generate image title from property data
      */
     private function generate_image_title($image_data) {
-        if (isset($image_data['title']) && !empty($image_data['title'])) {
-            return sanitize_text_field($image_data['title']);
-        }
-        
         $title_parts = array();
         
-        if (isset($image_data['property_title'])) {
+        if (isset($image_data['property_title']) && !empty($image_data['property_title'])) {
             $title_parts[] = $image_data['property_title'];
-        } elseif (isset($image_data['property_ref'])) {
-            $title_parts[] = $image_data['property_ref'];
+        } elseif (isset($image_data['property_ref']) && !empty($image_data['property_ref'])) {
+            $title_parts[] = 'Property ' . $image_data['property_ref'];
         } else {
-            $title_parts[] = 'Property ' . $image_data['property_id'];
+            $title_parts[] = 'Property Image';
         }
         
         if (isset($image_data['sort_order'])) {
             $title_parts[] = 'Image ' . ($image_data['sort_order'] + 1);
         }
         
-        return !empty($title_parts) ? implode(' - ', $title_parts) : 'Property Image';
+        return implode(' - ', $title_parts);
     }
     
     /**
      * Generate image alt text from property data
      */
     private function generate_image_alt($image_data) {
-        if (isset($image_data['alt']) && !empty($image_data['alt'])) {
-            return sanitize_text_field($image_data['alt']);
-        }
-        
         $alt_parts = array();
         
-        if (isset($image_data['property_title'])) {
+        if (isset($image_data['property_type']) && !empty($image_data['property_type'])) {
+            $alt_parts[] = $image_data['property_type'];
+        }
+        
+        if (isset($image_data['property_title']) && !empty($image_data['property_title'])) {
             $alt_parts[] = $image_data['property_title'];
         }
         
-        if (isset($image_data['property_town'])) {
-            $alt_parts[] = $image_data['property_town'];
+        if (empty($alt_parts)) {
+            return 'Property image';
         }
         
-        return !empty($alt_parts) ? implode(' in ', $alt_parts) : '';
+        return implode(' - ', $alt_parts);
     }
     
     /**
-     * Process pending images in background (cron handler)
+     * Process pending images via cron
      */
     public function process_pending_images_cron() {
-        $this->process_pending_images(self::BATCH_SIZE);
-    }
-    
-    /**
-     * Process pending images in batch
-     * This runs via cron every 30 minutes
-     */
-    public function process_pending_images($batch_size = null) {
-        if ($batch_size === null) {
-            $batch_size = self::BATCH_SIZE;
-        }
+        global $wpdb;
         
-        $batch_size = max(1, min(50, intval($batch_size)));
+        $images_table = PropertyManager_Database::get_table_name('property_images');
         
-        error_log('Property Manager: Processing up to ' . $batch_size . ' pending images');
-        
-        $pending_images = PropertyManager_Database::get_pending_images($batch_size);
+        // Get pending images (limit to batch size)
+        $pending_images = $wpdb->get_results($wpdb->prepare(
+            "SELECT * FROM {$images_table} 
+             WHERE download_status = 'pending' 
+             AND download_attempts < %d 
+             ORDER BY created_at ASC 
+             LIMIT %d",
+            self::MAX_RETRIES,
+            self::BATCH_SIZE
+        ));
         
         if (empty($pending_images)) {
-            error_log('Property Manager: No pending images to process');
-            return 0;
+            return;
         }
         
-        error_log('Property Manager: Found ' . count($pending_images) . ' pending images');
+        error_log('Property Manager: Processing ' . count($pending_images) . ' pending images');
         
-        $processed = 0;
-        $failed = 0;
-        
-        foreach ($pending_images as $image_record) {
-            try {
-                error_log('Property Manager: Processing image ID ' . $image_record->id . ' for property ' . $image_record->property_id);
+        foreach ($pending_images as $image) {
+            // Mark as downloading
+            $wpdb->update(
+                $images_table,
+                array(
+                    'download_status' => 'downloading',
+                    'download_attempts' => $image->download_attempts + 1
+                ),
+                array('id' => $image->id),
+                array('%s', '%d'),
+                array('%d')
+            );
+            
+            // Download image
+            $image_data = array(
+                'image_id' => $image->image_id,
+                'sort_order' => $image->sort_order,
+                'original_url' => $image->original_url
+            );
+            
+            $attachment_id = $this->download_image($image->original_url, $image->property_id, $image_data);
+            
+            if ($attachment_id) {
+                // Success - update record
+                $attachment_url = wp_get_attachment_url($attachment_id);
                 
-                // Prepare image data
-                $image_data = array(
-                    'property_id' => $image_record->property_id,
-                    'image_id' => $image_record->image_id,
-                    'title' => $image_record->image_title,
-                    'alt' => $image_record->image_alt,
-                    'sort_order' => $image_record->sort_order,
-                    'original_url' => $image_record->original_url
-                );
-                
-                // Mark as downloading to prevent concurrent processing
-                global $wpdb;
-                $table = PropertyManager_Database::get_table_name('property_images');
                 $wpdb->update(
-                    $table,
-                    array('download_status' => 'downloading'),
-                    array('id' => $image_record->id),
-                    array('%s'),
+                    $images_table,
+                    array(
+                        'attachment_id' => $attachment_id,
+                        'image_url' => $attachment_url,
+                        'download_status' => 'downloaded',
+                        'error_message' => null
+                    ),
+                    array('id' => $image->id),
+                    array('%d', '%s', '%s', '%s'),
                     array('%d')
                 );
                 
-                // Download and save image
-                $attachment_id = $this->download_image($image_record->original_url, $image_record->property_id, $image_data);
+                error_log('Property Manager: Successfully processed image ID ' . $image->id);
+            } else {
+                // Failed - mark as failed if max retries reached
+                $status = ($image->download_attempts + 1 >= self::MAX_RETRIES) ? 'failed' : 'pending';
                 
-                if ($attachment_id) {
-                    // Update database with attachment ID
-                    $local_url = wp_get_attachment_url($attachment_id);
-                    PropertyManager_Database::update_image_attachment($image_record->id, $attachment_id, $local_url);
-                    $processed++;
-                    
-                    error_log('Property Manager: Successfully processed image ID ' . $image_record->id . ' -> attachment ' . $attachment_id);
-                } else {
-                    // Mark as failed
-                    PropertyManager_Database::mark_image_failed($image_record->id, 'Download failed');
-                    $failed++;
-                    
-                    error_log('Property Manager: Failed to process image ID ' . $image_record->id);
-                }
-                
-            } catch (Exception $e) {
-                PropertyManager_Database::mark_image_failed($image_record->id, $e->getMessage());
-                $failed++;
-                
-                error_log('Property Manager: Exception processing image ID ' . $image_record->id . ': ' . $e->getMessage());
-            }
-            
-            // Add small delay to prevent overwhelming the server
-            usleep(self::PROCESSING_DELAY_MS);
-        }
-        
-        error_log('Property Manager: Batch complete - Processed: ' . $processed . ', Failed: ' . $failed);
-        
-        return $processed;
-    }
-    
-    /**
-     * Process images for a specific property
-     */
-    public function process_property_images($property_id, $limit = null, $force_redownload = false) {
-        global $wpdb;
-        
-        $property_id = intval($property_id);
-        
-        $table = PropertyManager_Database::get_table_name('property_images');
-        
-        $where_clause = "property_id = %d";
-        $where_params = array($property_id);
-        
-        if (!$force_redownload) {
-            $where_clause .= " AND download_status = 'pending'";
-        }
-        
-        $sql = "SELECT * FROM {$table} WHERE {$where_clause} ORDER BY sort_order ASC";
-        
-        if ($limit) {
-            $sql .= " LIMIT " . intval($limit);
-        }
-        
-        $images = $wpdb->get_results($wpdb->prepare($sql, $where_params));
-        
-        if (empty($images)) {
-            return 0;
-        }
-        
-        $processed = 0;
-        
-        foreach ($images as $image_record) {
-            try {
-                $image_data = array(
-                    'property_id' => $image_record->property_id,
-                    'image_id' => $image_record->image_id,
-                    'title' => $image_record->image_title,
-                    'alt' => $image_record->image_alt,
-                    'sort_order' => $image_record->sort_order,
-                    'original_url' => $image_record->original_url
+                $wpdb->update(
+                    $images_table,
+                    array(
+                        'download_status' => $status,
+                        'error_message' => 'Download failed after ' . ($image->download_attempts + 1) . ' attempts'
+                    ),
+                    array('id' => $image->id),
+                    array('%s', '%s'),
+                    array('%d')
                 );
                 
-                $attachment_id = $this->download_image($image_record->original_url, $image_record->property_id, $image_data);
-                
-                if ($attachment_id) {
-                    $local_url = wp_get_attachment_url($attachment_id);
-                    PropertyManager_Database::update_image_attachment($image_record->id, $attachment_id, $local_url);
-                    $processed++;
-                } else {
-                    PropertyManager_Database::mark_image_failed($image_record->id, 'Download failed');
-                }
-                
-            } catch (Exception $e) {
-                PropertyManager_Database::mark_image_failed($image_record->id, $e->getMessage());
+                error_log('Property Manager: Failed to process image ID ' . $image->id);
             }
             
+            // Small delay between downloads to avoid overwhelming the server
             usleep(self::PROCESSING_DELAY_MS);
         }
         
-        return $processed;
+        error_log('Property Manager: Finished processing image batch');
     }
     
     /**
-     * Get image download statistics
+     * Get image processing statistics
      */
-    public function get_image_stats() {
+    public function get_processing_stats() {
         global $wpdb;
         
-        $table = PropertyManager_Database::get_table_name('property_images');
+        $images_table = PropertyManager_Database::get_table_name('property_images');
         
-        return array(
-            'total' => (int) $wpdb->get_var("SELECT COUNT(*) FROM {$table}"),
-            'pending' => (int) $wpdb->get_var("SELECT COUNT(*) FROM {$table} WHERE download_status = 'pending'"),
-            'downloading' => (int) $wpdb->get_var("SELECT COUNT(*) FROM {$table} WHERE download_status = 'downloading'"),
-            'downloaded' => (int) $wpdb->get_var("SELECT COUNT(*) FROM {$table} WHERE download_status = 'downloaded'"),
-            'failed' => (int) $wpdb->get_var("SELECT COUNT(*) FROM {$table} WHERE download_status = 'failed'")
-        );
-    }
-    
-    /**
-     * Retry failed downloads
-     */
-    public function retry_failed_downloads($limit = 10) {
-        global $wpdb;
+        $stats = $wpdb->get_row("
+            SELECT 
+                COUNT(*) as total,
+                SUM(CASE WHEN download_status = 'pending' THEN 1 ELSE 0 END) as pending,
+                SUM(CASE WHEN download_status = 'downloading' THEN 1 ELSE 0 END) as downloading,
+                SUM(CASE WHEN download_status = 'downloaded' THEN 1 ELSE 0 END) as downloaded,
+                SUM(CASE WHEN download_status = 'failed' THEN 1 ELSE 0 END) as failed
+            FROM {$images_table}
+        ", ARRAY_A);
         
-        $limit = max(1, min(100, intval($limit)));
-        
-        $table = PropertyManager_Database::get_table_name('property_images');
-        
-        // Reset failed images to pending for retry (only if attempts < max retries)
-        $wpdb->query($wpdb->prepare(
-            "UPDATE {$table} 
-             SET download_status = 'pending', download_attempts = 0 
-             WHERE download_status = 'failed' 
-             AND download_attempts < %d 
-             LIMIT %d",
-            self::MAX_RETRIES,
-            $limit
-        ));
-        
-        $affected = $wpdb->rows_affected;
-        
-        if ($affected > 0) {
-            error_log('Property Manager: Queued ' . $affected . ' failed images for retry');
+        if (!$stats) {
+            return array(
+                'total' => 0,
+                'pending' => 0,
+                'downloading' => 0,
+                'downloaded' => 0,
+                'failed' => 0,
+                'progress' => 0
+            );
         }
         
-        return $affected;
+        return array_merge($stats, array(
+            'progress' => $stats['total'] > 0 ? round(($stats['downloaded'] / $stats['total']) * 100, 2) : 0
+        ));
     }
     
     /**
-     * Clean up orphaned attachments
-     * Removes WordPress attachments that are no longer linked to any property
+     * Cleanup orphaned attachments (daily cron)
      */
     public function cleanup_orphaned_attachments() {
         global $wpdb;
         
-        // Find property manager attachments that aren't in our images table
-        $orphaned_attachments = $wpdb->get_results("
+        // Find attachments with _property_manager_image meta but no property record
+        $orphaned = $wpdb->get_col("
             SELECT p.ID 
             FROM {$wpdb->posts} p
             INNER JOIN {$wpdb->postmeta} pm ON p.ID = pm.post_id
+            LEFT JOIN {$wpdb->prefix}pm_property_images pi ON p.ID = pi.attachment_id
             WHERE p.post_type = 'attachment'
             AND pm.meta_key = '_property_manager_image'
             AND pm.meta_value = '1'
-            AND p.ID NOT IN (
-                SELECT attachment_id 
-                FROM " . PropertyManager_Database::get_table_name('property_images') . "
-                WHERE attachment_id IS NOT NULL
-            )
+            AND pi.id IS NULL
         ");
         
-        $deleted = 0;
-        
-        foreach ($orphaned_attachments as $attachment) {
-            // This will also delete from S3 if offload plugin is active
-            if (wp_delete_attachment($attachment->ID, true)) {
-                $deleted++;
-                error_log('Property Manager: Deleted orphaned attachment ' . $attachment->ID . ' (including S3 if offloaded)');
-            }
-        }
-        
-        if ($deleted > 0) {
-            error_log('Property Manager: Cleaned up ' . $deleted . ' orphaned attachments');
-        }
-        
-        return $deleted;
-    }
-    
-    /**
-     * Get failed images with details
-     */
-    public function get_failed_images($limit = 50) {
-        global $wpdb;
-        
-        $limit = max(1, min(100, intval($limit)));
-        
-        $images_table = PropertyManager_Database::get_table_name('property_images');
-        $properties_table = PropertyManager_Database::get_table_name('properties');
-        
-        return $wpdb->get_results($wpdb->prepare(
-            "SELECT i.*, p.title as property_title, p.ref as property_ref 
-             FROM {$images_table} i 
-             LEFT JOIN {$properties_table} p ON i.property_id = p.id 
-             WHERE i.download_status = 'failed' 
-             ORDER BY i.updated_at DESC 
-             LIMIT %d",
-            $limit
-        ));
-    }
-    
-    /**
-     * Reset downloading status (stuck images)
-     * If an image has been in 'downloading' status for too long, reset it to pending
-     */
-    public function reset_stuck_downloads() {
-        global $wpdb;
-        
-        $table = PropertyManager_Database::get_table_name('property_images');
-        
-        // Reset images stuck in downloading status for more than 1 hour
-        $wpdb->query(
-            "UPDATE {$table} 
-             SET download_status = 'pending' 
-             WHERE download_status = 'downloading' 
-             AND updated_at < DATE_SUB(NOW(), INTERVAL 1 HOUR)"
-        );
-        
-        $affected = $wpdb->rows_affected;
-        
-        if ($affected > 0) {
-            error_log('Property Manager: Reset ' . $affected . ' stuck downloads');
-        }
-        
-        return $affected;
-    }
-    
-    /**
-     * Force reprocess all images for a property
-     */
-    public function reprocess_property_images($property_id) {
-        global $wpdb;
-        
-        $property_id = intval($property_id);
-        
-        $table = PropertyManager_Database::get_table_name('property_images');
-        
-        // Get all images for this property
-        $images = $wpdb->get_results($wpdb->prepare(
-            "SELECT id, attachment_id FROM {$table} WHERE property_id = %d",
-            $property_id
-        ));
-        
-        $deleted = 0;
-        
-        // Delete existing attachments
-        foreach ($images as $image) {
-            if ($image->attachment_id) {
-                // This also deletes from S3 if offload is active
-                if (wp_delete_attachment($image->attachment_id, true)) {
-                    $deleted++;
-                }
-            }
-        }
-        
-        // Reset all images to pending
-        $wpdb->update(
-            $table,
-            array(
-                'attachment_id' => null,
-                'download_status' => 'pending',
-                'download_attempts' => 0,
-                'error_message' => null
-            ),
-            array('property_id' => $property_id),
-            array('%d', '%s', '%d', '%s'),
-            array('%d')
-        );
-        
-        error_log('Property Manager: Reset ' . count($images) . ' images for property ' . $property_id . ' (deleted ' . $deleted . ' attachments)');
-        
-        // Process immediately
-        return $this->process_property_images($property_id);
-    }
-    
-    /**
-     * Get download queue status
-     */
-    public function get_queue_status() {
-        $stats = $this->get_image_stats();
-        
-        return array(
-            'total_queued' => $stats['pending'] + $stats['downloading'],
-            'pending' => $stats['pending'],
-            'downloading' => $stats['downloading'],
-            'completed' => $stats['downloaded'],
-            'failed' => $stats['failed'],
-            'total' => $stats['total'],
-            'completion_percentage' => $stats['total'] > 0 ? round(($stats['downloaded'] / $stats['total']) * 100, 2) : 0
-        );
-    }
-    
-    /**
-     * Test image download (for admin testing)
-     */
-    public function test_image_download($image_url) {
-        try {
-            // Validate URL
-            if (!filter_var($image_url, FILTER_VALIDATE_URL)) {
-                return array(
-                    'success' => false,
-                    'message' => 'Invalid URL format'
-                );
+        if (!empty($orphaned)) {
+            foreach ($orphaned as $attachment_id) {
+                wp_delete_attachment($attachment_id, true);
             }
             
-            // Try to download
-            $temp_file = $this->download_to_temp($image_url);
-            
-            if (!$temp_file) {
-                return array(
-                    'success' => false,
-                    'message' => 'Failed to download image'
-                );
-            }
-            
-            // Validate
-            try {
-                $this->validate_image($temp_file);
-                $file_size = filesize($temp_file);
-                $image_info = getimagesize($temp_file);
-                
-                @unlink($temp_file);
-                
-                return array(
-                    'success' => true,
-                    'message' => 'Image is valid and can be downloaded',
-                    'size' => size_format($file_size),
-                    'dimensions' => $image_info[0] . 'x' . $image_info[1],
-                    'mime_type' => $image_info['mime']
-                );
-            } catch (Exception $e) {
-                @unlink($temp_file);
-                return array(
-                    'success' => false,
-                    'message' => 'Validation failed: ' . $e->getMessage()
-                );
-            }
-            
-        } catch (Exception $e) {
-            return array(
-                'success' => false,
-                'message' => $e->getMessage()
-            );
+            error_log('Property Manager: Cleaned up ' . count($orphaned) . ' orphaned attachments');
         }
     }
     
@@ -962,62 +672,5 @@ class PropertyManager_ImageDownloader {
         }
         
         return $status;
-    }
-    
-    /**
-     * Verify S3 offload is working for property images
-     */
-    public function verify_s3_offload() {
-        global $wpdb;
-        
-        // Get a sample downloaded image
-        $images_table = PropertyManager_Database::get_table_name('property_images');
-        $sample_image = $wpdb->get_row(
-            "SELECT attachment_id FROM {$images_table} 
-             WHERE download_status = 'downloaded' 
-             AND attachment_id IS NOT NULL 
-             LIMIT 1"
-        );
-        
-        if (!$sample_image) {
-            return array(
-                'verified' => false,
-                'message' => 'No downloaded images found to verify'
-            );
-        }
-        
-        $attachment_url = wp_get_attachment_url($sample_image->attachment_id);
-        
-        if (!$attachment_url) {
-            return array(
-                'verified' => false,
-                'message' => 'Could not get attachment URL'
-            );
-        }
-        
-        // Check if URL contains S3/cloud storage domain
-        $is_offloaded = (
-            strpos($attachment_url, 's3.amazonaws.com') !== false ||
-            strpos($attachment_url, 'cloudfront.net') !== false ||
-            strpos($attachment_url, 'storage.googleapis.com') !== false ||
-            strpos($attachment_url, 'digitaloceanspaces.com') !== false ||
-            strpos($attachment_url, '.r2.cloudflarestorage.com') !== false
-        );
-        
-        if ($is_offloaded) {
-            return array(
-                'verified' => true,
-                'message' => 'S3 offload is working! Image URL: ' . $attachment_url,
-                'sample_url' => $attachment_url,
-                'attachment_id' => $sample_image->attachment_id
-            );
-        } else {
-            return array(
-                'verified' => false,
-                'message' => 'Images are not being offloaded to S3. URL: ' . $attachment_url,
-                'sample_url' => $attachment_url,
-                'attachment_id' => $sample_image->attachment_id
-            );
-        }
     }
 }

@@ -1,8 +1,9 @@
 <?php
 /**
- * Property Search Class
+ * Property Search Class - FIXED VERSION
  * 
  * @package PropertyManagerPro
+ * @version 1.0.1
  */
 
 // Prevent direct access
@@ -14,6 +15,7 @@ class PropertyManager_Search {
     
     private static $instance = null;
     private $search_params = array();
+    private $fulltext_enabled = null; // Cache FULLTEXT availability
     
     public static function get_instance() {
         if (null === self::$instance) {
@@ -67,136 +69,323 @@ class PropertyManager_Search {
             // Location-based
             'lat' => $this->get_search_param('lat'),
             'lng' => $this->get_search_param('lng'),
-            'radius' => $this->get_search_param('radius'), // km
+            'radius' => $this->get_search_param('radius')
         );
         
-        // Clean up parameters
-        $this->clean_search_params();
+        // Validate and sanitize parameters
+        $this->validate_params();
     }
     
     /**
-     * Get search parameter with sanitization
+     * Get search parameter from request
      */
     private function get_search_param($key, $default = null) {
-        $value = null;
-        
-        // Check POST first (form submission)
-        if (isset($_POST[$key])) {
-            $value = $_POST[$key];
+        if (isset($_GET[$key]) && $_GET[$key] !== '') {
+            return $_GET[$key];
         }
-        // Then check GET (URL parameters)
-        elseif (isset($_GET[$key])) {
-            $value = $_GET[$key];
+        return $default;
+    }
+    
+    /**
+     * Validate search parameters
+     */
+    private function validate_params() {
+        // Validate numeric parameters
+        $numeric_params = array('price_min', 'price_max', 'beds_min', 'beds_max', 'baths_min', 'baths_max', 'surface_min', 'surface_max', 'page', 'per_page');
+        foreach ($numeric_params as $param) {
+            if (isset($this->search_params[$param])) {
+                $this->search_params[$param] = max(0, intval($this->search_params[$param]));
+            }
         }
         
-        if ($value === null) {
-            return $default;
+        // Limit per_page
+        $this->search_params['per_page'] = min(100, max(1, $this->search_params['per_page']));
+        
+        // Validate order direction
+        $this->search_params['order'] = in_array(strtoupper($this->search_params['order']), array('ASC', 'DESC')) 
+            ? strtoupper($this->search_params['order']) : 'DESC';
+        
+        // FIXED: Validate orderby field against whitelist
+        $this->search_params['orderby'] = $this->validate_orderby($this->search_params['orderby']);
+    }
+    
+    /**
+     * Get allowed orderby fields (SECURITY: Whitelist)
+     * FIXED: Strict whitelist to prevent SQL injection
+     */
+    private function get_allowed_orderby_fields() {
+        return array(
+            'created_at'    => 'created_at',
+            'updated_at'    => 'updated_at',
+            'price'         => 'price',
+            'beds'          => 'beds',
+            'baths'         => 'baths',
+            'town'          => 'town',
+            'province'      => 'province',
+            'property_type' => 'property_type',
+            'view_count'    => 'view_count',
+            'ref'           => 'ref',
+            'distance'      => 'distance', // For location-based searches
+            'title'         => 'title'
+        );
+    }
+    
+    /**
+     * Validate orderby parameter against whitelist
+     * FIXED: Prevents SQL injection in ORDER BY clause
+     */
+    private function validate_orderby($orderby) {
+        $allowed_fields = $this->get_allowed_orderby_fields();
+        
+        if (isset($allowed_fields[$orderby])) {
+            return $allowed_fields[$orderby];
         }
         
-        // Sanitize based on parameter type
-        switch ($key) {
-            case 'keyword':
-            case 'location':
-            case 'property_type':
-            case 'province':
-            case 'town':
-            case 'orderby':
-            case 'order':
-            case 'view':
-            case 'currency':
-            case 'price_freq':
-                return sanitize_text_field($value);
-                
-            case 'price_min':
-            case 'price_max':
-            case 'surface_min':
-            case 'surface_max':
-            case 'lat':
-            case 'lng':
-            case 'radius':
-                return is_numeric($value) ? floatval($value) : $default;
-                
-            case 'beds_min':
-            case 'beds_max':
-            case 'baths_min':
-            case 'baths_max':
-            case 'per_page':
-            case 'page':
-                return is_numeric($value) ? intval($value) : $default;
-                
-            case 'pool':
-            case 'new_build':
-            case 'featured':
-                return is_numeric($value) ? intval($value) : $default;
-                
-            case 'features':
-                if (is_array($value)) {
-                    return array_map('sanitize_text_field', $value);
-                }
-                return $default;
-                
-            default:
-                return sanitize_text_field($value);
+        // Default to created_at if invalid
+        return 'created_at';
+    }
+    
+    /**
+     * Build ORDER BY SQL clause with security
+     * FIXED: Uses validated whitelist fields only
+     */
+    private function build_orderby_sql($orderby, $order) {
+        // Validate orderby field
+        $orderby = $this->validate_orderby($orderby);
+        
+        // Validate order direction
+        $order = in_array(strtoupper($order), array('ASC', 'DESC')) ? strtoupper($order) : 'DESC';
+        
+        // SECURITY: Both values are now guaranteed safe
+        return "ORDER BY {$orderby} {$order}";
+    }
+    
+    /**
+     * Check if FULLTEXT index exists on properties table
+     * FIXED: Checks before using MATCH AGAINST
+     */
+    private function has_fulltext_index() {
+        // Cache the result
+        if ($this->fulltext_enabled !== null) {
+            return $this->fulltext_enabled;
+        }
+        
+        global $wpdb;
+        $table = PropertyManager_Database::get_table_name('properties');
+        
+        // Check for FULLTEXT index named 'search_text'
+        $indexes = $wpdb->get_results("SHOW INDEX FROM {$table} WHERE Index_type = 'FULLTEXT'");
+        
+        $this->fulltext_enabled = !empty($indexes);
+        
+        return $this->fulltext_enabled;
+    }
+    
+    /**
+     * Search properties with keyword using FULLTEXT or LIKE
+     * FIXED: Falls back to LIKE if FULLTEXT not available
+     */
+    private function add_keyword_search(&$where_clauses, &$where_values, $keyword) {
+        global $wpdb;
+        
+        if (empty($keyword)) {
+            return;
+        }
+        
+        $keyword = sanitize_text_field($keyword);
+        
+        // Use FULLTEXT if available
+        if ($this->has_fulltext_index()) {
+            // FULLTEXT search (more efficient)
+            $where_clauses[] = "MATCH(title, desc_en, desc_es, desc_de, desc_fr) AGAINST(%s IN BOOLEAN MODE)";
+            $where_values[] = $keyword . '*'; // Wildcard for partial matching
+        } else {
+            // Fallback to LIKE search
+            $keyword_like = '%' . $wpdb->esc_like($keyword) . '%';
+            $where_clauses[] = "(
+                title LIKE %s OR 
+                desc_en LIKE %s OR 
+                desc_es LIKE %s OR 
+                desc_de LIKE %s OR 
+                desc_fr LIKE %s OR 
+                ref LIKE %s
+            )";
+            $where_values[] = $keyword_like;
+            $where_values[] = $keyword_like;
+            $where_values[] = $keyword_like;
+            $where_values[] = $keyword_like;
+            $where_values[] = $keyword_like;
+            $where_values[] = $keyword_like;
         }
     }
     
     /**
-     * Clean up search parameters
+     * Execute property search
      */
-    private function clean_search_params() {
-        // Remove empty values
-        $this->search_params = array_filter($this->search_params, function($value) {
-            return $value !== '' && $value !== null && $value !== array();
-        });
+    public function search($args = array()) {
+        global $wpdb;
         
-        // Validate numeric ranges
-        if (isset($this->search_params['price_min']) && isset($this->search_params['price_max'])) {
-            if ($this->search_params['price_min'] > $this->search_params['price_max']) {
-                // Swap if min > max
-                $temp = $this->search_params['price_min'];
-                $this->search_params['price_min'] = $this->search_params['price_max'];
-                $this->search_params['price_max'] = $temp;
-            }
+        $defaults = array(
+            'keyword' => '',
+            'property_type' => '',
+            'town' => '',
+            'province' => '',
+            'location' => '',
+            'price_min' => 0,
+            'price_max' => 0,
+            'beds_min' => 0,
+            'beds_max' => 0,
+            'baths_min' => 0,
+            'baths_max' => 0,
+            'surface_min' => 0,
+            'surface_max' => 0,
+            'pool' => null,
+            'new_build' => null,
+            'featured' => null,
+            'price_freq' => '',
+            'orderby' => 'created_at',
+            'order' => 'DESC',
+            'page' => 1,
+            'per_page' => 20
+        );
+        
+        $args = wp_parse_args($args, $defaults);
+        
+        $properties_table = PropertyManager_Database::get_table_name('properties');
+        
+        // Build WHERE clause
+        $where_clauses = array("status = 'active'");
+        $where_values = array();
+        
+        // Keyword search
+        if (!empty($args['keyword'])) {
+            $this->add_keyword_search($where_clauses, $where_values, $args['keyword']);
         }
         
-        // Same for other ranges
-        $ranges = array('beds', 'baths', 'surface');
-        foreach ($ranges as $range) {
-            $min_key = $range . '_min';
-            $max_key = $range . '_max';
-            
-            if (isset($this->search_params[$min_key]) && isset($this->search_params[$max_key])) {
-                if ($this->search_params[$min_key] > $this->search_params[$max_key]) {
-                    $temp = $this->search_params[$min_key];
-                    $this->search_params[$min_key] = $this->search_params[$max_key];
-                    $this->search_params[$max_key] = $temp;
-                }
-            }
+        // Property type
+        if (!empty($args['property_type'])) {
+            $where_clauses[] = "property_type = %s";
+            $where_values[] = sanitize_text_field($args['property_type']);
         }
         
-        // Validate per_page limits
-        if (isset($this->search_params['per_page'])) {
-            $this->search_params['per_page'] = max(1, min(100, $this->search_params['per_page']));
+        // Location filters
+        if (!empty($args['town'])) {
+            $where_clauses[] = "town = %s";
+            $where_values[] = sanitize_text_field($args['town']);
+        } elseif (!empty($args['province'])) {
+            $where_clauses[] = "province = %s";
+            $where_values[] = sanitize_text_field($args['province']);
+        } elseif (!empty($args['location'])) {
+            // Search in both town and province
+            $location_like = '%' . $wpdb->esc_like(sanitize_text_field($args['location'])) . '%';
+            $where_clauses[] = "(town LIKE %s OR province LIKE %s)";
+            $where_values[] = $location_like;
+            $where_values[] = $location_like;
         }
         
-        // Validate page number
-        if (isset($this->search_params['page'])) {
-            $this->search_params['page'] = max(1, $this->search_params['page']);
+        // Price range
+        if ($args['price_min'] > 0) {
+            $where_clauses[] = "price >= %f";
+            $where_values[] = floatval($args['price_min']);
         }
         
-        // Validate order direction
-        if (isset($this->search_params['order'])) {
-            $this->search_params['order'] = in_array(strtoupper($this->search_params['order']), array('ASC', 'DESC')) 
-                ? strtoupper($this->search_params['order']) : 'DESC';
+        if ($args['price_max'] > 0) {
+            $where_clauses[] = "price <= %f";
+            $where_values[] = floatval($args['price_max']);
         }
         
-        // Validate orderby field
-        $valid_orderby = array('created_at', 'updated_at', 'price', 'beds', 'baths', 'town', 'province', 'type', 'views', 'ref');
-        if (isset($this->search_params['orderby'])) {
-            if (!in_array($this->search_params['orderby'], $valid_orderby)) {
-                $this->search_params['orderby'] = 'created_at';
-            }
+        // Beds range
+        if ($args['beds_min'] > 0) {
+            $where_clauses[] = "beds >= %d";
+            $where_values[] = intval($args['beds_min']);
         }
+        
+        if ($args['beds_max'] > 0) {
+            $where_clauses[] = "beds <= %d";
+            $where_values[] = intval($args['beds_max']);
+        }
+        
+        // Baths range
+        if ($args['baths_min'] > 0) {
+            $where_clauses[] = "baths >= %d";
+            $where_values[] = intval($args['baths_min']);
+        }
+        
+        if ($args['baths_max'] > 0) {
+            $where_clauses[] = "baths <= %d";
+            $where_values[] = intval($args['baths_max']);
+        }
+        
+        // Surface area range
+        if ($args['surface_min'] > 0) {
+            $where_clauses[] = "surface_area_built >= %d";
+            $where_values[] = intval($args['surface_min']);
+        }
+        
+        if ($args['surface_max'] > 0) {
+            $where_clauses[] = "surface_area_built <= %d";
+            $where_values[] = intval($args['surface_max']);
+        }
+        
+        // Boolean filters
+        if ($args['pool'] !== null) {
+            $where_clauses[] = "pool = %d";
+            $where_values[] = intval($args['pool']);
+        }
+        
+        if ($args['new_build'] !== null) {
+            $where_clauses[] = "new_build = %d";
+            $where_values[] = intval($args['new_build']);
+        }
+        
+        if ($args['featured'] !== null) {
+            $where_clauses[] = "featured = %d";
+            $where_values[] = intval($args['featured']);
+        }
+        
+        // Price frequency
+        if (!empty($args['price_freq'])) {
+            $where_clauses[] = "price_freq = %s";
+            $where_values[] = sanitize_text_field($args['price_freq']);
+        }
+        
+        // Build final WHERE clause
+        $where_sql = implode(' AND ', $where_clauses);
+        
+        // Build ORDER BY clause (SECURED)
+        $orderby_sql = $this->build_orderby_sql($args['orderby'], $args['order']);
+        
+        // Pagination
+        $page = max(1, intval($args['page']));
+        $per_page = min(100, max(1, intval($args['per_page'])));
+        $offset = ($page - 1) * $per_page;
+        
+        // Count total results
+        $count_sql = "SELECT COUNT(*) FROM {$properties_table} WHERE {$where_sql}";
+        if (!empty($where_values)) {
+            $count_sql = $wpdb->prepare($count_sql, $where_values);
+        }
+        $total_results = $wpdb->get_var($count_sql);
+        
+        // Get results
+        $results_sql = "SELECT * FROM {$properties_table} WHERE {$where_sql} {$orderby_sql} LIMIT %d OFFSET %d";
+        $sql_values = array_merge($where_values, array($per_page, $offset));
+        $properties = $wpdb->get_results($wpdb->prepare($results_sql, $sql_values));
+        
+        // Add images to each property
+        $property_manager = PropertyManager_Property::get_instance();
+        foreach ($properties as &$property) {
+            $property->images = $property_manager->get_property_images($property->id, true);
+            $property->features = $property_manager->get_property_features($property->id);
+        }
+        
+        return array(
+            'properties' => $properties,
+            'total' => $total_results,
+            'pages' => ceil($total_results / $per_page),
+            'current_page' => $page,
+            'per_page' => $per_page
+        );
     }
     
     /**
@@ -221,241 +410,6 @@ class PropertyManager_Search {
     }
     
     /**
-     * Execute property search
-     */
-    public function search_properties() {
-        $property_manager = PropertyManager_Property::get_instance();
-        
-        // Build search arguments for property manager
-        $search_args = array(
-            'page' => $this->get_param('page', 1),
-            'per_page' => $this->get_param('per_page', 20),
-            'orderby' => $this->get_param('orderby', 'created_at'),
-            'order' => $this->get_param('order', 'DESC')
-        );
-        
-        // Add search filters
-        if ($keyword = $this->get_param('keyword')) {
-            $search_args['keyword'] = $keyword;
-        }
-        
-        if ($price_min = $this->get_param('price_min')) {
-            $search_args['min_price'] = $price_min;
-        }
-        
-        if ($price_max = $this->get_param('price_max')) {
-            $search_args['max_price'] = $price_max;
-        }
-        
-        if ($beds_min = $this->get_param('beds_min')) {
-            $search_args['min_beds'] = $beds_min;
-        }
-        
-        if ($beds_max = $this->get_param('beds_max')) {
-            $search_args['max_beds'] = $beds_max;
-        }
-        
-        if ($baths_min = $this->get_param('baths_min')) {
-            $search_args['min_baths'] = $baths_min;
-        }
-        
-        if ($baths_max = $this->get_param('baths_max')) {
-            $search_args['max_baths'] = $baths_max;
-        }
-        
-        if ($property_type = $this->get_param('property_type')) {
-            $search_args['type'] = $property_type;
-        }
-        
-        if ($town = $this->get_param('town')) {
-            $search_args['town'] = $town;
-        }
-        
-        if ($province = $this->get_param('province')) {
-            $search_args['province'] = $province;
-        }
-        
-        if ($pool = $this->get_param('pool')) {
-            $search_args['pool'] = $pool;
-        }
-        
-        if ($new_build = $this->get_param('new_build')) {
-            $search_args['new_build'] = $new_build;
-        }
-        
-        if ($featured = $this->get_param('featured')) {
-            $search_args['featured'] = $featured;
-        }
-        
-        if ($price_freq = $this->get_param('price_freq')) {
-            $search_args['price_freq'] = $price_freq;
-        }
-        
-        // Handle location-based search
-        $location = $this->get_param('location');
-        if ($location && !$this->get_param('town') && !$this->get_param('province')) {
-            // Search in both town and province if specific location not set
-            $search_args['location'] = $location;
-        }
-        
-        // Execute search with potential location filtering
-        if ($this->get_param('lat') && $this->get_param('lng') && $this->get_param('radius')) {
-            return $this->search_properties_by_location($search_args);
-        } else {
-            return $property_manager->search_properties($search_args);
-        }
-    }
-    
-    /**
-     * Search properties by location (radius-based)
-     */
-    private function search_properties_by_location($search_args) {
-        global $wpdb;
-        
-        $lat = $this->get_param('lat');
-        $lng = $this->get_param('lng');
-        $radius = $this->get_param('radius');
-        
-        $properties_table = PropertyManager_Database::get_table_name('properties');
-        
-        // Use Haversine formula to find properties within radius
-        $distance_sql = "
-            (6371 * acos(
-                cos(radians(%f)) * 
-                cos(radians(latitude)) * 
-                cos(radians(longitude) - radians(%f)) + 
-                sin(radians(%f)) * 
-                sin(radians(latitude))
-            ))
-        ";
-        
-        // Build WHERE clause for location
-        $where_clauses = array("status = 'active'");
-        $where_values = array();
-        
-        // Add location filter
-        $where_clauses[] = sprintf($distance_sql, $lat, $lng, $lat) . " <= %f";
-        $where_values[] = $radius;
-        
-        // Add other search filters
-        $this->add_search_filters_to_query($where_clauses, $where_values, $search_args);
-        
-        // Build final query
-        $where_sql = implode(' AND ', $where_clauses);
-        $orderby_sql = $this->build_orderby_sql($search_args['orderby'], $search_args['order']);
-        
-        // Pagination
-        $offset = ($search_args['page'] - 1) * $search_args['per_page'];
-        
-        // Count total results
-        $count_sql = "SELECT COUNT(*) FROM $properties_table WHERE $where_sql";
-        $total_results = $wpdb->get_var($wpdb->prepare($count_sql, $where_values));
-        
-        // Get results with distance
-        $results_sql = "
-            SELECT *, " . sprintf($distance_sql, $lat, $lng, $lat) . " as distance 
-            FROM $properties_table 
-            WHERE $where_sql 
-            $orderby_sql 
-            LIMIT %d OFFSET %d
-        ";
-        
-        $sql_values = array_merge($where_values, array($search_args['per_page'], $offset));
-        $properties = $wpdb->get_results($wpdb->prepare($results_sql, $sql_values));
-        
-        // Add images to each property
-        foreach ($properties as &$property) {
-            $property_manager = PropertyManager_Property::get_instance();
-            $property->images = $property_manager->get_property_images($property->id, true);
-            $property->features = $property_manager->get_property_features($property->id);
-        }
-        
-        return array(
-            'properties' => $properties,
-            'total' => $total_results,
-            'pages' => ceil($total_results / $search_args['per_page']),
-            'current_page' => $search_args['page'],
-            'per_page' => $search_args['per_page']
-        );
-    }
-    
-    /**
-     * Add search filters to SQL query
-     */
-    private function add_search_filters_to_query(&$where_clauses, &$where_values, $search_args) {
-        // Price range
-        if (isset($search_args['min_price']) && $search_args['min_price'] > 0) {
-            $where_clauses[] = "price >= %f";
-            $where_values[] = $search_args['min_price'];
-        }
-        
-        if (isset($search_args['max_price']) && $search_args['max_price'] > 0) {
-            $where_clauses[] = "price <= %f";
-            $where_values[] = $search_args['max_price'];
-        }
-        
-        // Beds range
-        if (isset($search_args['min_beds']) && $search_args['min_beds'] > 0) {
-            $where_clauses[] = "beds >= %d";
-            $where_values[] = $search_args['min_beds'];
-        }
-        
-        if (isset($search_args['max_beds']) && $search_args['max_beds'] > 0) {
-            $where_clauses[] = "beds <= %d";
-            $where_values[] = $search_args['max_beds'];
-        }
-        
-        // Add other filters as needed
-        if (isset($search_args['type'])) {
-            $where_clauses[] = "type = %s";
-            $where_values[] = $search_args['type'];
-        }
-        
-        if (isset($search_args['town'])) {
-            $where_clauses[] = "town = %s";
-            $where_values[] = $search_args['town'];
-        }
-        
-        if (isset($search_args['province'])) {
-            $where_clauses[] = "province = %s";
-            $where_values[] = $search_args['province'];
-        }
-        
-        // Add keyword search
-        if (isset($search_args['keyword'])) {
-            global $wpdb;
-            $where_clauses[] = "(title LIKE %s OR description_en LIKE %s OR description_es LIKE %s OR ref LIKE %s)";
-            $keyword_like = '%' . $wpdb->esc_like($search_args['keyword']) . '%';
-            $where_values[] = $keyword_like;
-            $where_values[] = $keyword_like;
-            $where_values[] = $keyword_like;
-            $where_values[] = $keyword_like;
-        }
-    }
-    
-    /**
-     * Build ORDER BY SQL clause
-     */
-    private function build_orderby_sql($orderby, $order) {
-        $valid_orderby = array(
-            'created_at', 'updated_at', 'price', 'beds', 'baths', 
-            'town', 'province', 'type', 'views', 'ref', 'distance'
-        );
-        
-        $valid_order = array('ASC', 'DESC');
-        
-        if (!in_array($orderby, $valid_orderby)) {
-            $orderby = 'created_at';
-        }
-        
-        if (!in_array(strtoupper($order), $valid_order)) {
-            $order = 'DESC';
-        }
-        
-        return "ORDER BY $orderby $order";
-    }
-    
-    /**
      * Get search URL with parameters
      */
     public function get_search_url($additional_params = array(), $remove_params = array()) {
@@ -471,7 +425,7 @@ class PropertyManager_Search {
             return $value !== '' && $value !== null && $value !== array();
         });
         
-        // Get current page URL
+        // Get search page URL
         $options = get_option('property_manager_pages', array());
         $search_page_id = isset($options['property_search']) ? $options['property_search'] : null;
         
@@ -484,164 +438,59 @@ class PropertyManager_Search {
     }
     
     /**
-     * Get pagination links
+     * Get property types for dropdown
      */
-    public function get_pagination_links($total_pages, $current_page) {
-        $links = array();
+    public function get_property_types() {
+        global $wpdb;
         
-        if ($total_pages <= 1) {
-            return $links;
-        }
+        $table = PropertyManager_Database::get_table_name('properties');
         
-        // Previous link
-        if ($current_page > 1) {
-            $links['prev'] = array(
-                'url' => $this->get_search_url(array('page' => $current_page - 1)),
-                'text' => __('&laquo; Previous', 'property-manager-pro')
-            );
-        }
-        
-        // Page numbers
-        $start = max(1, $current_page - 2);
-        $end = min($total_pages, $current_page + 2);
-        
-        for ($i = $start; $i <= $end; $i++) {
-            $links['pages'][$i] = array(
-                'url' => $this->get_search_url(array('page' => $i)),
-                'text' => $i,
-                'current' => ($i == $current_page)
-            );
-        }
-        
-        // Next link
-        if ($current_page < $total_pages) {
-            $links['next'] = array(
-                'url' => $this->get_search_url(array('page' => $current_page + 1)),
-                'text' => __('Next &raquo;', 'property-manager-pro')
-            );
-        }
-        
-        return $links;
+        return $wpdb->get_col("
+            SELECT DISTINCT property_type 
+            FROM {$table} 
+            WHERE status = 'active' AND property_type IS NOT NULL AND property_type != ''
+            ORDER BY property_type ASC
+        ");
     }
     
     /**
-     * Get sorting options
+     * Get towns for dropdown
      */
-    public function get_sort_options() {
-        return array(
-            'created_at_DESC' => __('Newest First', 'property-manager-pro'),
-            'created_at_ASC' => __('Oldest First', 'property-manager-pro'),
-            'price_ASC' => __('Price: Low to High', 'property-manager-pro'),
-            'price_DESC' => __('Price: High to Low', 'property-manager-pro'),
-            'beds_DESC' => __('Most Beds', 'property-manager-pro'),
-            'beds_ASC' => __('Fewest Beds', 'property-manager-pro'),
-            'views_DESC' => __('Most Popular', 'property-manager-pro'),
-            'town_ASC' => __('Location A-Z', 'property-manager-pro'),
-            'town_DESC' => __('Location Z-A', 'property-manager-pro')
-        );
+    public function get_towns($province = null) {
+        global $wpdb;
+        
+        $table = PropertyManager_Database::get_table_name('properties');
+        
+        $where_clause = "status = 'active' AND town IS NOT NULL AND town != ''";
+        $params = array();
+        
+        if ($province) {
+            $where_clause .= " AND province = %s";
+            $params[] = sanitize_text_field($province);
+        }
+        
+        $sql = "SELECT DISTINCT town FROM {$table} WHERE {$where_clause} ORDER BY town ASC";
+        
+        if (!empty($params)) {
+            $sql = $wpdb->prepare($sql, $params);
+        }
+        
+        return $wpdb->get_col($sql);
     }
     
     /**
-     * Get current sort option
+     * Get provinces for dropdown
      */
-    public function get_current_sort() {
-        $orderby = $this->get_param('orderby', 'created_at');
-        $order = $this->get_param('order', 'DESC');
-        return $orderby . '_' . $order;
-    }
-    
-    /**
-     * Get search summary text
-     */
-    public function get_search_summary($total_results) {
-        $summary_parts = array();
+    public function get_provinces() {
+        global $wpdb;
         
-        if ($keyword = $this->get_param('keyword')) {
-            $summary_parts[] = sprintf(__('"%s"', 'property-manager-pro'), esc_html($keyword));
-        }
+        $table = PropertyManager_Database::get_table_name('properties');
         
-        if ($property_type = $this->get_param('property_type')) {
-            $summary_parts[] = esc_html($property_type);
-        }
-        
-        if ($town = $this->get_param('town')) {
-            $summary_parts[] = sprintf(__('in %s', 'property-manager-pro'), esc_html($town));
-        } elseif ($province = $this->get_param('province')) {
-            $summary_parts[] = sprintf(__('in %s', 'property-manager-pro'), esc_html($province));
-        } elseif ($location = $this->get_param('location')) {
-            $summary_parts[] = sprintf(__('near %s', 'property-manager-pro'), esc_html($location));
-        }
-        
-        if ($price_min = $this->get_param('price_min')) {
-            if ($price_max = $this->get_param('price_max')) {
-                $summary_parts[] = sprintf(__('€%s - €%s', 'property-manager-pro'), 
-                    number_format($price_min), number_format($price_max));
-            } else {
-                $summary_parts[] = sprintf(__('from €%s', 'property-manager-pro'), number_format($price_min));
-            }
-        } elseif ($price_max = $this->get_param('price_max')) {
-            $summary_parts[] = sprintf(__('up to €%s', 'property-manager-pro'), number_format($price_max));
-        }
-        
-        $summary_text = '';
-        if (!empty($summary_parts)) {
-            $summary_text = sprintf(__('Properties %s', 'property-manager-pro'), implode(' ', $summary_parts));
-        } else {
-            $summary_text = __('All Properties', 'property-manager-pro');
-        }
-        
-        return sprintf(__('%s - %d results found', 'property-manager-pro'), $summary_text, $total_results);
-    }
-    
-    /**
-     * Check if any search filters are active
-     */
-    public function has_active_filters() {
-        $filter_params = array_diff_key($this->search_params, array_flip(array(
-            'page', 'per_page', 'orderby', 'order', 'view'
-        )));
-        
-        return !empty($filter_params);
-    }
-    
-    /**
-     * Get active filters for display
-     */
-    public function get_active_filters() {
-        $filters = array();
-        
-        if ($keyword = $this->get_param('keyword')) {
-            $filters['keyword'] = array(
-                'label' => __('Keyword', 'property-manager-pro'),
-                'value' => $keyword,
-                'remove_url' => $this->get_search_url(array(), array('keyword'))
-            );
-        }
-        
-        if ($property_type = $this->get_param('property_type')) {
-            $filters['property_type'] = array(
-                'label' => __('Type', 'property-manager-pro'),
-                'value' => $property_type,
-                'remove_url' => $this->get_search_url(array(), array('property_type'))
-            );
-        }
-        
-        // Add more filters as needed...
-        
-        return $filters;
-    }
-    
-    /**
-     * Clear all search filters
-     */
-    public function get_clear_filters_url() {
-        $options = get_option('property_manager_pages', array());
-        $search_page_id = isset($options['property_search']) ? $options['property_search'] : null;
-        
-        if ($search_page_id) {
-            return get_permalink($search_page_id);
-        }
-        
-        return home_url('/');
+        return $wpdb->get_col("
+            SELECT DISTINCT province 
+            FROM {$table} 
+            WHERE status = 'active' AND province IS NOT NULL AND province != ''
+            ORDER BY province ASC
+        ");
     }
 }
