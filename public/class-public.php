@@ -132,25 +132,23 @@ class PropertyManager_Public {
             true
         );
         
-        // Enqueue Leaflet for maps
+        // Leaflet JS for maps
         if ($this->is_property_page() || $this->is_search_page()) {
             wp_enqueue_script(
                 'leaflet',
                 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js',
-                array('jquery'),
+                array(),
                 '1.9.4',
                 true
             );
         }
         
-        // Localize script for AJAX
+        // Localize script with AJAX data
         wp_localize_script('property-manager-public', 'propertyManager', array(
             'ajaxUrl' => admin_url('admin-ajax.php'),
             'nonce' => wp_create_nonce('property_manager_nonce'),
             'isLoggedIn' => is_user_logged_in(),
-            'currentUserId' => get_current_user_id(),
             'strings' => array(
-                'loading' => __('Loading...', 'property-manager-pro'),
                 'error' => __('An error occurred. Please try again.', 'property-manager-pro'),
                 'success' => __('Success!', 'property-manager-pro'),
                 'confirmDelete' => __('Are you sure you want to delete this item?', 'property-manager-pro'),
@@ -224,110 +222,203 @@ class PropertyManager_Public {
     }
     
     /**
-     * Track property view for user/session
+     * Track property view for user/IP
+     * FIXED: Now uses pm_property_views table instead of pm_last_viewed
      */
     private function track_property_view_action($property_id) {
         global $wpdb;
         
-        $table = PropertyManager_Database::get_table_name('last_viewed');
+        // Use correct table name
+        $table = PropertyManager_Database::get_table_name('property_views');
         $user_id = get_current_user_id();
-        $session_id = session_id();
+        $ip_address = $this->get_client_ip();
+        
+        // Build WHERE clause
+        if ($user_id) {
+            $where_clause = $wpdb->prepare("user_id = %d", $user_id);
+        } else {
+            $where_clause = $wpdb->prepare("ip_address = %s AND user_id IS NULL", $ip_address);
+        }
         
         // Check if already viewed recently (within last hour)
         $recent_view = $wpdb->get_var($wpdb->prepare(
             "SELECT id FROM $table 
              WHERE property_id = %d 
-             AND " . ($user_id ? "user_id = %d" : "session_id = %s") . " 
+             AND " . $where_clause . "
              AND viewed_at > DATE_SUB(NOW(), INTERVAL 1 HOUR)",
-            $property_id,
-            $user_id ?: $session_id
+            $property_id
         ));
         
         if (!$recent_view) {
             // Insert new view record
             $wpdb->insert($table, array(
-                'user_id' => $user_id ?: null,
-                'session_id' => !$user_id ? $session_id : null,
                 'property_id' => $property_id,
+                'user_id' => $user_id ?: null,
+                'ip_address' => $ip_address,
+                'user_agent' => $this->get_user_agent(),
                 'viewed_at' => current_time('mysql')
-            ));
+            ), array('%d', '%d', '%s', '%s', '%s'));
         }
     }
     
     /**
      * Increment property view count
+     * FIXED: Changed column name from 'views' to 'view_count'
      */
     private function increment_property_views($property_id) {
         global $wpdb;
         
-        $table = PropertyManager_Database::get_table_name('properties');
+        $properties_table = PropertyManager_Database::get_table_name('properties');
         
         $wpdb->query($wpdb->prepare(
-            "UPDATE $table SET views = views + 1 WHERE id = %d",
+            "UPDATE $properties_table 
+             SET view_count = view_count + 1 
+             WHERE id = %d",
             $property_id
         ));
     }
     
     /**
-     * Add property content to single property pages
+     * Get client IP address
+     */
+    private function get_client_ip() {
+        $ip_keys = array(
+            'HTTP_CLIENT_IP',
+            'HTTP_X_FORWARDED_FOR',
+            'HTTP_X_FORWARDED',
+            'HTTP_X_CLUSTER_CLIENT_IP',
+            'HTTP_FORWARDED_FOR',
+            'HTTP_FORWARDED',
+            'REMOTE_ADDR'
+        );
+        
+        foreach ($ip_keys as $key) {
+            if (array_key_exists($key, $_SERVER) === true) {
+                foreach (explode(',', $_SERVER[$key]) as $ip) {
+                    $ip = trim($ip);
+                    
+                    if (filter_var($ip, FILTER_VALIDATE_IP, FILTER_FLAG_NO_PRIV_RANGE | FILTER_FLAG_NO_RES_RANGE) !== false) {
+                        return $ip;
+                    }
+                }
+            }
+        }
+        
+        return isset($_SERVER['REMOTE_ADDR']) ? $_SERVER['REMOTE_ADDR'] : '0.0.0.0';
+    }
+    
+    /**
+     * Get user agent
+     */
+    private function get_user_agent() {
+        return isset($_SERVER['HTTP_USER_AGENT']) ? 
+            substr(sanitize_text_field($_SERVER['HTTP_USER_AGENT']), 0, 255) : 
+            '';
+    }
+    
+    /**
+     * Enqueue Google Translate
+     */
+    private function enqueue_google_translate() {
+        // Add Google Translate script
+        wp_add_inline_script('property-manager-public', '
+            function googleTranslateElementInit() {
+                new google.translate.TranslateElement({
+                    pageLanguage: "en",
+                    includedLanguages: "en,es,de,fr",
+                    layout: google.translate.TranslateElement.InlineLayout.SIMPLE,
+                    autoDisplay: false
+                }, "google_translate_element");
+            }
+        ');
+        
+        wp_enqueue_script(
+            'google-translate',
+            'https://translate.google.com/translate_a/element.js?cb=googleTranslateElementInit',
+            array(),
+            null,
+            true
+        );
+    }
+    
+    /**
+     * Track property view in footer
+     */
+    public function track_property_view() {
+        $property_id = get_query_var('property_id');
+        
+        if ($property_id && !wp_doing_ajax()) {
+            echo '<script>
+                jQuery(document).ready(function($) {
+                    // Track property view via AJAX for analytics
+                    $.post(propertyManager.ajaxUrl, {
+                        action: "track_property_view",
+                        property_id: ' . intval($property_id) . ',
+                        nonce: propertyManager.nonce
+                    });
+                });
+            </script>';
+        }
+    }
+    
+    /**
+     * Check if current page is property page
+     */
+    private function is_property_page() {
+        return get_query_var('property_id') ? true : false;
+    }
+    
+    /**
+     * Check if current page is search page
+     */
+    private function is_search_page() {
+        $pages = get_option('property_manager_pages', array());
+        return is_page($pages);
+    }
+    
+    /**
+     * Get custom CSS
+     */
+    private function get_custom_css() {
+        $options = get_option('property_manager_options', array());
+        
+        $primary_color = isset($options['primary_color']) ? $options['primary_color'] : '#007bff';
+        $secondary_color = isset($options['secondary_color']) ? $options['secondary_color'] : '#6c757d';
+        
+        $css = "
+            :root {
+                --pm-primary-color: {$primary_color};
+                --pm-secondary-color: {$secondary_color};
+            }
+            .property-card:hover {
+                transform: translateY(-5px);
+                transition: transform 0.3s ease;
+            }
+            .favorite-btn.active {
+                color: #dc3545;
+            }
+        ";
+        
+        return $css;
+    }
+    
+    /**
+     * Property single content filter
      */
     public function property_single_content($content) {
-        if (get_query_var('property_id') && in_the_loop() && is_main_query()) {
-            return $this->get_property_single_content();
+        if (get_query_var('property_id')) {
+            $property_id = get_query_var('property_id');
+            $property_manager = PropertyManager_Property::get_instance();
+            $property = $property_manager->get_property($property_id);
+            
+            if ($property) {
+                ob_start();
+                $this->load_template('content-single-property.php', array('property' => $property));
+                return ob_get_clean();
+            }
         }
         
         return $content;
-    }
-    
-    /**
-     * Get property single content
-     */
-    private function get_property_single_content() {
-        $property_id = get_query_var('property_id');
-        $property = $this->get_property($property_id);
-        
-        if (!$property) {
-            return '<div class="alert alert-danger">' . __('Property not found.', 'property-manager-pro') . '</div>';
-        }
-        
-        ob_start();
-        $this->load_template('single-property-content.php', array('property' => $property));
-        return ob_get_clean();
-    }
-    
-    /**
-     * Get property data
-     */
-    private function get_property($property_id) {
-        global $wpdb;
-        
-        $properties_table = PropertyManager_Database::get_table_name('properties');
-        $images_table = PropertyManager_Database::get_table_name('property_images');
-        $features_table = PropertyManager_Database::get_table_name('property_features');
-        
-        // Get property
-        $property = $wpdb->get_row($wpdb->prepare(
-            "SELECT * FROM $properties_table WHERE id = %d AND status = 'active'",
-            $property_id
-        ));
-        
-        if (!$property) {
-            return null;
-        }
-        
-        // Get images
-        $property->images = $wpdb->get_results($wpdb->prepare(
-            "SELECT * FROM $images_table WHERE property_id = %d ORDER BY sort_order ASC",
-            $property_id
-        ));
-        
-        // Get features
-        $property->features = $wpdb->get_results($wpdb->prepare(
-            "SELECT feature_name, feature_value FROM $features_table WHERE property_id = %d",
-            $property_id
-        ));
-        
-        return $property;
     }
     
     /**
@@ -335,169 +426,114 @@ class PropertyManager_Public {
      */
     public function handle_form_submissions() {
         // Handle property inquiry form
-        if (isset($_POST['action']) && $_POST['action'] === 'property_inquiry' && wp_verify_nonce($_POST['nonce'], 'property_inquiry_nonce')) {
+        if (isset($_POST['property_inquiry_submit']) && wp_verify_nonce($_POST['inquiry_nonce'], 'property_inquiry')) {
             $this->handle_property_inquiry();
         }
         
-        // Handle contact form
-        if (isset($_POST['action']) && $_POST['action'] === 'contact_form' && wp_verify_nonce($_POST['nonce'], 'contact_form_nonce')) {
-            $this->handle_contact_form();
-        }
-        
-        // Handle alert subscription
-        if (isset($_POST['action']) && $_POST['action'] === 'subscribe_alert' && wp_verify_nonce($_POST['nonce'], 'alert_subscription_nonce')) {
-            $this->handle_alert_subscription();
+        // Handle property alert signup
+        if (isset($_POST['property_alert_submit']) && wp_verify_nonce($_POST['alert_nonce'], 'property_alert_signup')) {
+            $this->handle_alert_signup();
         }
     }
     
     /**
-     * Handle property inquiry form submission
+     * Handle property inquiry submission
      */
     private function handle_property_inquiry() {
-        $property_id = intval($_POST['property_id']);
-        $name = sanitize_text_field($_POST['name']);
-        $email = sanitize_email($_POST['email']);
-        $phone = sanitize_text_field($_POST['phone']);
-        $message = sanitize_textarea_field($_POST['message']);
+        $property_id = isset($_POST['property_id']) ? intval($_POST['property_id']) : 0;
+        $name = isset($_POST['name']) ? sanitize_text_field($_POST['name']) : '';
+        $email = isset($_POST['email']) ? sanitize_email($_POST['email']) : '';
+        $phone = isset($_POST['phone']) ? sanitize_text_field($_POST['phone']) : '';
+        $message = isset($_POST['message']) ? sanitize_textarea_field($_POST['message']) : '';
         
-        // Validate required fields
-        if (empty($name) || empty($email) || empty($message)) {
-            $this->add_notice('error', __('Please fill in all required fields.', 'property-manager-pro'));
+        // Validation
+        if (empty($name) || empty($email) || empty($message) || !is_email($email)) {
+            $this->add_notice('error', __('Please fill in all required fields with valid information.', 'property-manager-pro'));
             return;
         }
         
-        if (!is_email($email)) {
-            $this->add_notice('error', __('Please enter a valid email address.', 'property-manager-pro'));
-            return;
-        }
-        
-        // Save inquiry to database
+        // Insert inquiry
         global $wpdb;
         $table = PropertyManager_Database::get_table_name('property_inquiries');
         
         $result = $wpdb->insert($table, array(
             'property_id' => $property_id,
+            'user_id' => get_current_user_id() ?: null,
             'name' => $name,
             'email' => $email,
             'phone' => $phone,
             'message' => $message,
-            'user_id' => get_current_user_id() ?: null,
-            'status' => 'new',
-            'created_at' => current_time('mysql')
+            'ip_address' => $this->get_client_ip(),
+            'user_agent' => $this->get_user_agent(),
+            'status' => 'new'
         ));
         
         if ($result) {
-            // Send email to admin
+            // Send notification email
             $email_manager = PropertyManager_Email::get_instance();
-            $email_manager->send_property_inquiry($property_id, array(
+            $email_manager->send_inquiry_notification(array(
+                'property_id' => $property_id,
                 'name' => $name,
                 'email' => $email,
                 'phone' => $phone,
                 'message' => $message
             ));
             
-            $this->add_notice('success', __('Your inquiry has been sent successfully. We will contact you soon.', 'property-manager-pro'));
+            $this->add_notice('success', __('Thank you! Your inquiry has been sent successfully.', 'property-manager-pro'));
         } else {
             $this->add_notice('error', __('Failed to send inquiry. Please try again.', 'property-manager-pro'));
         }
     }
     
     /**
-     * Handle alert subscription
+     * Handle alert signup
      */
-    private function handle_alert_subscription() {
-        $email = sanitize_email($_POST['email']);
-        $frequency = sanitize_text_field($_POST['frequency']);
-        $search_criteria = $_POST['search_criteria'];
-        
-        if (!is_email($email)) {
-            $this->add_notice('error', __('Please enter a valid email address.', 'property-manager-pro'));
-            return;
-        }
-        
-        $alerts_manager = PropertyManager_Alerts::get_instance();
-        $user_id = is_user_logged_in() ? get_current_user_id() : null;
-        
-        $result = $alerts_manager->create_alert($email, $search_criteria, $frequency, $user_id);
-        
-        if (is_wp_error($result)) {
-            $this->add_notice('error', $result->get_error_message());
-        } else {
-            $this->add_notice('success', __('Property alert created successfully. Please check your email to verify your subscription.', 'property-manager-pro'));
-        }
+    private function handle_alert_signup() {
+        // Implementation handled by AJAX in class-ajax-search.php
     }
     
     /**
-     * After user login actions
+     * After login hook
      */
     public function after_login($user_login, $user) {
-        // Redirect to dashboard if no redirect URL is set
-        if (!isset($_REQUEST['redirect_to']) || empty($_REQUEST['redirect_to'])) {
-            $dashboard_page = $this->get_page_by_key('user_dashboard');
-            if ($dashboard_page) {
-                wp_redirect(get_permalink($dashboard_page));
-                exit;
-            }
+        // Redirect to dashboard if specified
+        $redirect = get_user_meta($user->ID, 'property_manager_redirect_after_login', true);
+        if ($redirect) {
+            delete_user_meta($user->ID, 'property_manager_redirect_after_login');
+            wp_safe_redirect($redirect);
+            exit;
         }
     }
     
     /**
-     * After user registration actions
+     * After registration hook
      */
     public function after_registration($user_id) {
+        // Send welcome email
+        $email_manager = PropertyManager_Email::get_instance();
         $user = get_userdata($user_id);
-        
-        if ($user) {
-            // Send welcome email
-            $email_manager = PropertyManager_Email::get_instance();
-            $email_manager->send_welcome_email($user->user_email, $user->display_name);
-        }
+        $email_manager->send_welcome_email($user->user_email, $user->display_name);
     }
     
     /**
-     * Add body classes for property pages
+     * Add body classes
      */
     public function add_body_classes($classes) {
         if ($this->is_property_page()) {
-            $classes[] = 'property-single';
-            $classes[] = 'property-manager-page';
+            $classes[] = 'property-manager-single';
         }
         
         if ($this->is_search_page()) {
-            $classes[] = 'property-search';
-            $classes[] = 'property-manager-page';
+            $classes[] = 'property-manager-search';
         }
         
         return $classes;
     }
     
     /**
-     * Check if current page is a property page
-     */
-    private function is_property_page() {
-        return get_query_var('property_id') !== '';
-    }
-    
-    /**
-     * Check if current page is a search page
-     */
-    private function is_search_page() {
-        $search_pages = array('property_search', 'property_advanced_search');
-        
-        foreach ($search_pages as $page_key) {
-            $page_id = $this->get_page_by_key($page_key);
-            if ($page_id && is_page($page_id)) {
-                return true;
-            }
-        }
-        
-        return false;
-    }
-    
-    /**
      * Get page ID by key
      */
-    private function get_page_by_key($key) {
+    private function get_page_id($key) {
         $pages = get_option('property_manager_pages', array());
         return isset($pages[$key]) ? $pages[$key] : null;
     }
@@ -560,13 +596,13 @@ class PropertyManager_Public {
      */
     public function display_notifications() {
         if (isset($_SESSION['property_manager_notices']) && !empty($_SESSION['property_manager_notices'])) {
-            echo '<div id="property-manager-notifications" style="position: fixed; top: 20px; right: 20px; z-index: 9999;">';
+            echo '<div id="property-manager-notifications" style="position: fixed; top: 20px; right: 20px; z-index: 9999; max-width: 400px;">';
             
             foreach ($_SESSION['property_manager_notices'] as $notice) {
                 $alert_class = $notice['type'] === 'error' ? 'alert-danger' : 'alert-success';
-                echo '<div class="alert ' . $alert_class . ' alert-dismissible fade show" role="alert">';
+                echo '<div class="alert ' . esc_attr($alert_class) . ' alert-dismissible fade show" role="alert">';
                 echo esc_html($notice['message']);
-                echo '<button type="button" class="btn-close" data-bs-dismiss="alert"></button>';
+                echo '<button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>';
                 echo '</div>';
             }
             
@@ -574,144 +610,6 @@ class PropertyManager_Public {
             
             // Clear notices after displaying
             unset($_SESSION['property_manager_notices']);
-        }
-    }
-    
-    /**
-     * Get custom CSS
-     */
-    private function get_custom_css() {
-        $options = get_option('property_manager_options', array());
-        
-        $css = '
-        :root {
-            --pm-primary-color: #2c3e50;
-            --pm-secondary-color: #3498db;
-            --pm-success-color: #27ae60;
-            --pm-danger-color: #e74c3c;
-            --pm-warning-color: #f39c12;
-            --pm-info-color: #17a2b8;
-            --pm-light-color: #f8f9fa;
-            --pm-dark-color: #343a40;
-        }
-        
-        .property-manager-page {
-            --bs-primary: var(--pm-primary-color);
-            --bs-secondary: var(--pm-secondary-color);
-        }
-        
-        .property-card {
-            transition: transform 0.2s ease-in-out;
-        }
-        
-        .property-card:hover {
-            transform: translateY(-5px);
-        }
-        
-        .property-price {
-            color: var(--pm-primary-color);
-            font-weight: bold;
-            font-size: 1.25rem;
-        }
-        
-        .property-features {
-            color: var(--pm-secondary-color);
-        }
-        
-        .favorite-btn {
-            transition: color 0.2s ease;
-        }
-        
-        .favorite-btn.favorited {
-            color: var(--pm-danger-color);
-        }
-        
-        .map-container {
-            height: 400px;
-            border-radius: 0.375rem;
-            overflow: hidden;
-        }
-        
-        .property-gallery {
-            border-radius: 0.375rem;
-            overflow: hidden;
-        }
-        
-        .search-filters {
-            background: var(--pm-light-color);
-            border-radius: 0.375rem;
-            padding: 1.5rem;
-        }
-        
-        .notification-container {
-            position: fixed;
-            top: 20px;
-            right: 20px;
-            z-index: 9999;
-            max-width: 400px;
-        }
-        
-        #google_translate_element {
-            margin: 0;
-        }
-        
-        .goog-te-gadget {
-            font-size: 0;
-        }
-        
-        .goog-te-gadget-simple {
-            background: none !important;
-            border: 1px solid #ccc !important;
-            padding: 8px !important;
-            border-radius: 4px !important;
-        }
-        ';
-        
-        return $css;
-    }
-    
-    /**
-     * Enqueue Google Translate
-     */
-    private function enqueue_google_translate() {
-        // Add Google Translate script
-        wp_add_inline_script('property-manager-public', '
-            function googleTranslateElementInit() {
-                new google.translate.TranslateElement({
-                    pageLanguage: "en",
-                    includedLanguages: "en,es,de,fr",
-                    layout: google.translate.TranslateElement.InlineLayout.SIMPLE,
-                    autoDisplay: false
-                }, "google_translate_element");
-            }
-        ');
-        
-        wp_enqueue_script(
-            'google-translate',
-            'https://translate.google.com/translate_a/element.js?cb=googleTranslateElementInit',
-            array(),
-            null,
-            true
-        );
-    }
-    
-    /**
-     * Track property view in footer
-     */
-    public function track_property_view() {
-        $property_id = get_query_var('property_id');
-        
-        if ($property_id && !wp_doing_ajax()) {
-            echo '<script>
-                jQuery(document).ready(function($) {
-                    // Track property view via AJAX for analytics
-                    $.post(propertyManager.ajaxUrl, {
-                        action: "track_property_view",
-                        property_id: ' . intval($property_id) . ',
-                        nonce: propertyManager.nonce
-                    });
-                });
-            </script>';
         }
     }
 }

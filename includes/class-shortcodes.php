@@ -36,10 +36,10 @@ class PropertyManager_Shortcodes {
         
         // User management shortcodes
         add_shortcode('property_user_dashboard', array($this, 'property_user_dashboard'));
-        //add_shortcode('property_user_favorites', array($this, 'property_user_favorites'));
+        add_shortcode('property_user_favorites', array($this, 'property_user_favorites'));
         add_shortcode('property_saved_searches', array($this, 'property_saved_searches'));
-        //add_shortcode('property_alerts_management', array($this, 'property_alerts_management'));
-        //add_shortcode('property_last_viewed', array($this, 'property_last_viewed'));
+        add_shortcode('property_alerts_management', array($this, 'property_alerts_management'));
+        add_shortcode('property_last_viewed', array($this, 'property_last_viewed'));
         
         // Property display shortcodes
         add_shortcode('property_list', array($this, 'property_list'));
