@@ -93,7 +93,7 @@ class PropertyManager_UserManager {
         
         if ($enable_registration && !get_option('users_can_register')) {
             // Log that registration is available through plugin
-            error_log('Property Manager: User registration available through plugin forms');
+            error_log('Property Manager Pro: User registration available through plugin forms');
         }
     }
     
@@ -176,7 +176,7 @@ class PropertyManager_UserManager {
     public function on_user_register($user_id) {
         // Validate user ID
         if (!$user_id || $user_id < 1) {
-            error_log('Property Manager: Invalid user ID on registration');
+            error_log('Property Manager Pro: Invalid user ID on registration');
             return;
         }
         
@@ -190,7 +190,7 @@ class PropertyManager_UserManager {
         $this->send_welcome_email($user_id);
         
         // Log registration
-        error_log('Property Manager: New user registered - ID: ' . $user_id);
+        error_log('Property Manager Pro: New user registered - ID: ' . $user_id);
     }
     
     /**
@@ -312,7 +312,7 @@ class PropertyManager_UserManager {
         $result = wp_mail($user->user_email, $subject, $message);
         
         if (!$result) {
-            error_log('Property Manager: Failed to send verification email to user ' . $user_id);
+            error_log('Property Manager Pro: Failed to send verification email to user ' . $user_id);
         }
         
         return $result;
@@ -386,7 +386,7 @@ class PropertyManager_UserManager {
         $result = wp_mail($user->user_email, $subject, $message);
         
         if (!$result) {
-            error_log('Property Manager: Failed to send welcome email to user ' . $user_id);
+            error_log('Property Manager Pro: Failed to send welcome email to user ' . $user_id);
         }
         
         return $result;

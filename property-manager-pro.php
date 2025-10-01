@@ -82,6 +82,7 @@ class PropertyManagerPro {
     public function init_components() {
         PropertyManager_Database::get_instance();
         PropertyManager_ImageDownloader::get_instance();
+        PropertyManager_FeedImporter::get_instance();
         PropertyManager_Property::get_instance();
         PropertyManager_Search::get_instance();
         PropertyManager_SearchForms::get_instance();
@@ -172,7 +173,7 @@ class PropertyManagerPro {
         if (!wp_next_scheduled('property_manager_import_feed')) {
             $scheduled = wp_schedule_event(time(), 'hourly', 'property_manager_import_feed');
             if ($scheduled === false) {
-                error_log('Property Manager: Failed to schedule feed import cron job');
+                error_log('Property Manager Pro: Failed to schedule feed import cron job');
             }
         }
         
@@ -181,7 +182,7 @@ class PropertyManagerPro {
         if (!wp_next_scheduled('property_manager_process_images')) {
             $scheduled = wp_schedule_event(time(), 'thirtyminutes', 'property_manager_process_images');
             if ($scheduled === false) {
-                error_log('Property Manager: Failed to schedule image processing cron job');
+                error_log('Property Manager Pro: Failed to schedule image processing cron job');
             }
         }
         
@@ -189,7 +190,7 @@ class PropertyManagerPro {
         if (!wp_next_scheduled('property_manager_daily_alerts')) {
             $scheduled = wp_schedule_event(strtotime('tomorrow 08:00:00'), 'daily', 'property_manager_daily_alerts');
             if ($scheduled === false) {
-                error_log('Property Manager: Failed to schedule daily alerts cron job');
+                error_log('Property Manager Pro: Failed to schedule daily alerts cron job');
             }
         }
         
@@ -198,7 +199,7 @@ class PropertyManagerPro {
             $next_monday = strtotime('next Monday 08:00:00');
             $scheduled = wp_schedule_event($next_monday, 'weekly', 'property_manager_weekly_alerts');
             if ($scheduled === false) {
-                error_log('Property Manager: Failed to schedule weekly alerts cron job');
+                error_log('Property Manager Pro: Failed to schedule weekly alerts cron job');
             }
         }
         
@@ -207,7 +208,7 @@ class PropertyManagerPro {
             $next_month = strtotime('first day of next month 08:00:00');
             $scheduled = wp_schedule_event($next_month, 'monthly', 'property_manager_monthly_alerts');
             if ($scheduled === false) {
-                error_log('Property Manager: Failed to schedule monthly alerts cron job');
+                error_log('Property Manager Pro: Failed to schedule monthly alerts cron job');
             }
         }
         
@@ -215,7 +216,7 @@ class PropertyManagerPro {
         if (!wp_next_scheduled('property_manager_daily_cleanup')) {
             $scheduled = wp_schedule_event(strtotime('tomorrow 02:00:00'), 'daily', 'property_manager_daily_cleanup');
             if ($scheduled === false) {
-                error_log('Property Manager: Failed to schedule daily cleanup cron job');
+                error_log('Property Manager Pro: Failed to schedule daily cleanup cron job');
             }
         }
     }
@@ -231,7 +232,7 @@ class PropertyManagerPro {
             $db_result = PropertyManager_Database::create_tables();
             
             if (!$db_result) {
-                error_log('Property Manager: Warning - Database table creation may have encountered issues');
+                error_log('Property Manager Pro: Warning - Database table creation may have encountered issues');
             }
             
             // Create default pages
@@ -250,7 +251,7 @@ class PropertyManagerPro {
             error_log('Property Manager Pro: Plugin activated successfully (v' . PROPERTY_MANAGER_VERSION . ')');
             
         } catch (Exception $e) {
-            error_log('Property Manager: Activation error - ' . $e->getMessage());
+            error_log('Property Manager Pro: Activation error - ' . $e->getMessage());
             wp_die(
                 'Property Manager Pro activation failed: ' . $e->getMessage(),
                 'Plugin Activation Error',
@@ -414,7 +415,7 @@ class PropertyManagerPro {
                 if ($page_id && !is_wp_error($page_id)) {
                     $created_pages[$page_key] = $page_id;
                 } else {
-                    error_log('Property Manager: Failed to create page: ' . $page_data['title']);
+                    error_log('Property Manager Pro: Failed to create page: ' . $page_data['title']);
                 }
             }
         }

@@ -59,7 +59,7 @@ class PropertyManager_Email {
         $this->log_email($type, $to, $subject, $message, $sent ? 'sent' : 'failed', $sent ? null : 'wp_mail returned false');
         
         if (!$sent) {
-            error_log('Property Manager: Failed to send email to ' . $to . ' - Subject: ' . $subject);
+            error_log('Property Manager Pro: Failed to send email to ' . $to . ' - Subject: ' . $subject);
         }
         
         return $sent;
@@ -231,7 +231,7 @@ class PropertyManager_Email {
         ");
         
         if ($deleted > 0) {
-            error_log('Property Manager: Cleaned up ' . $deleted . ' old email logs');
+            error_log('Property Manager Pro: Cleaned up ' . $deleted . ' old email logs');
         }
     }
 }

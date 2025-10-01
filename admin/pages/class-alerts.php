@@ -119,7 +119,7 @@ class PropertyManager_Admin_Alerts {
         // Check for database errors
         if ($wpdb->last_error) {
             echo '<div class="notice notice-error"><p>' . esc_html__('Database error occurred while fetching alerts.', 'property-manager-pro') . '</p></div>';
-            error_log('Property Manager: Database error in alerts page - ' . $wpdb->last_error);
+            error_log('Property Manager Pro: Database error in alerts page - ' . $wpdb->last_error);
         }
         
         // Success messages

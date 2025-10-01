@@ -233,11 +233,11 @@ class PropertyManager_Alerts {
         ));
         
         if (empty($alerts)) {
-            error_log('Property Manager: No alerts to process for frequency: ' . $frequency);
+            error_log('Property Manager Pro: No alerts to process for frequency: ' . $frequency);
             return;
         }
         
-        error_log('Property Manager: Processing ' . count($alerts) . ' ' . $frequency . ' alerts');
+        error_log('Property Manager Pro: Processing ' . count($alerts) . ' ' . $frequency . ' alerts');
         
         $property_search = PropertyManager_Search::get_instance();
         $email_manager = PropertyManager_Email::get_instance();
@@ -248,7 +248,7 @@ class PropertyManager_Alerts {
                 $criteria = json_decode($alert->search_criteria, true);
                 
                 if (!is_array($criteria)) {
-                    error_log('Property Manager: Invalid search criteria for alert ID ' . $alert->id);
+                    error_log('Property Manager Pro: Invalid search criteria for alert ID ' . $alert->id);
                     continue;
                 }
                 
@@ -258,13 +258,13 @@ class PropertyManager_Alerts {
                 
                 // Check if there are new properties
                 if (empty($search_results['properties'])) {
-                    error_log('Property Manager: No new properties found for alert ID ' . $alert->id);
+                    error_log('Property Manager Pro: No new properties found for alert ID ' . $alert->id);
                     // Update last_sent even if no properties found
                     $this->update_alert_last_sent($alert->id);
                     continue;
                 }
                 
-                error_log('Property Manager: Found ' . count($search_results['properties']) . ' properties for alert ID ' . $alert->id);
+                error_log('Property Manager Pro: Found ' . count($search_results['properties']) . ' properties for alert ID ' . $alert->id);
                 
                 // Send email with properties
                 $email_sent = $email_manager->send_property_alert(
@@ -277,17 +277,17 @@ class PropertyManager_Alerts {
                 if ($email_sent) {
                     // Update last_sent timestamp
                     $this->update_alert_last_sent($alert->id);
-                    error_log('Property Manager: Successfully sent alert email to ' . $alert->email);
+                    error_log('Property Manager Pro: Successfully sent alert email to ' . $alert->email);
                 } else {
-                    error_log('Property Manager: Failed to send alert email to ' . $alert->email);
+                    error_log('Property Manager Pro: Failed to send alert email to ' . $alert->email);
                 }
                 
             } catch (Exception $e) {
-                error_log('Property Manager: Error processing alert ID ' . $alert->id . ' - ' . $e->getMessage());
+                error_log('Property Manager Pro: Error processing alert ID ' . $alert->id . ' - ' . $e->getMessage());
             }
         }
         
-        error_log('Property Manager: Finished processing ' . $frequency . ' alerts');
+        error_log('Property Manager Pro: Finished processing ' . $frequency . ' alerts');
     }
     
     /**
@@ -378,7 +378,7 @@ class PropertyManager_Alerts {
         ");
         
         if ($deleted > 0) {
-            error_log('Property Manager: Cleaned up ' . $deleted . ' expired alert tokens');
+            error_log('Property Manager Pro: Cleaned up ' . $deleted . ' expired alert tokens');
         }
     }
     

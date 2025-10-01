@@ -489,7 +489,7 @@ class PropertyManager_AjaxSearch {
             );
             
             if (!$email_sent) {
-                error_log('Property Manager: Failed to send verification email to ' . $alert_email);
+                error_log('Property Manager Pro: Failed to send verification email to ' . $alert_email);
             }
             
             // Log successful alert creation
@@ -509,7 +509,7 @@ class PropertyManager_AjaxSearch {
             // Rollback on error
             $wpdb->query('ROLLBACK');
             
-            error_log('Property Manager: Failed to save search alert - ' . $e->getMessage());
+            error_log('Property Manager Pro: Failed to save search alert - ' . $e->getMessage());
             
             wp_send_json_error(array(
                 'message' => __('Failed to save search alert. Please try again later.', 'property-manager-pro')

@@ -58,7 +58,7 @@ class PropertyManager_Admin_Dashboard {
             return;
         }
         
-        $property_stats = isset($stats['properties']) ? $stats['properties'] : array();
+        $property_stats = isset($stats['properties']) ? $stats['properties'] : array();        
         $image_stats = isset($stats['images']) ? $stats['images'] : array();
         $import_logs = isset($stats['imports']) ? $stats['imports'] : array();
         
@@ -124,8 +124,8 @@ class PropertyManager_Admin_Dashboard {
                             <table class="widefat">
                                 <thead>
                                     <tr>
-                                        <th><?php esc_html_e('Type', 'property-manager-pro'); ?></th>
-                                        <th><?php esc_html_e('Count', 'property-manager-pro'); ?></th>
+                                        <th><b><?php esc_html_e('Type', 'property-manager-pro'); ?></b></th>
+                                        <th><b><?php esc_html_e('Count', 'property-manager-pro'); ?></b></th>
                                     </tr>
                                 </thead>
                                 <tbody>
@@ -197,9 +197,9 @@ class PropertyManager_Admin_Dashboard {
                             <table class="widefat">
                                 <thead>
                                     <tr>
-                                        <th><?php esc_html_e('Date', 'property-manager-pro'); ?></th>
-                                        <th><?php esc_html_e('Status', 'property-manager-pro'); ?></th>
-                                        <th><?php esc_html_e('Results', 'property-manager-pro'); ?></th>
+                                        <th><b><?php esc_html_e('Date', 'property-manager-pro'); ?></b></th>
+                                        <th><b><?php esc_html_e('Status', 'property-manager-pro'); ?></b></th>
+                                        <th><b><?php esc_html_e('Results', 'property-manager-pro'); ?></b></th>
                                     </tr>
                                 </thead>
                                 <tbody>
@@ -343,7 +343,7 @@ class PropertyManager_Admin_Dashboard {
             return array_merge($this->get_default_property_stats(), $stats);
             
         } catch (Exception $e) {
-            error_log('Property Manager: Error getting property stats - ' . $e->getMessage());
+            error_log('Property Manager Pro: Error getting property stats - ' . $e->getMessage());
             return $this->get_default_property_stats();
         }
     }
@@ -363,7 +363,7 @@ class PropertyManager_Admin_Dashboard {
             return array_merge($this->get_default_image_stats(), $stats);
             
         } catch (Exception $e) {
-            error_log('Property Manager: Error getting image stats - ' . $e->getMessage());
+            error_log('Property Manager Pro: Error getting image stats - ' . $e->getMessage());
             return $this->get_default_image_stats();
         }
     }
@@ -379,7 +379,7 @@ class PropertyManager_Admin_Dashboard {
             return is_array($logs) ? $logs : array();
             
         } catch (Exception $e) {
-            error_log('Property Manager: Error getting import stats - ' . $e->getMessage());
+            error_log('Property Manager Pro: Error getting import stats - ' . $e->getMessage());
             return array();
         }
     }
@@ -425,7 +425,7 @@ class PropertyManager_Admin_Dashboard {
             return $stats;
             
         } catch (Exception $e) {
-            error_log('Property Manager: Error getting user stats - ' . $e->getMessage());
+            error_log('Property Manager Pro: Error getting user stats - ' . $e->getMessage());
             return array(
                 'total_users' => 0,
                 'active_alerts' => 0,

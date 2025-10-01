@@ -85,7 +85,7 @@ class PropertyManager_Public {
         
         // Check if headers already sent
         if (headers_sent()) {
-            error_log('Property Manager: Cannot start session - headers already sent');
+            error_log('Property Manager Pro: Cannot start session - headers already sent');
             return;
         }
         
@@ -113,7 +113,7 @@ class PropertyManager_Public {
             
             // Start the session
             if (!session_start()) {
-                error_log('Property Manager: Failed to start session');
+                error_log('Property Manager Pro: Failed to start session');
             }
             
             // Regenerate session ID periodically for security

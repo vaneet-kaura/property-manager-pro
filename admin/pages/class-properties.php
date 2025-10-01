@@ -375,7 +375,7 @@ class PropertyManager_Admin_Properties {
                                         </span>
                                     </div>
                                 </td>
-                                <td><?php echo esc_html($property->type); ?></td>
+                                <td><?php echo esc_html($property->property_type); ?></td>
                                 <td><?php echo esc_html($property->town . ', ' . $property->province); ?></td>
                                 <td><?php echo esc_html($property_manager->format_price($property->price)); ?></td>
                                 <td><?php echo absint($property->beds) . '/' . absint($property->baths); ?></td>
@@ -556,12 +556,12 @@ class PropertyManager_Admin_Properties {
                                             <td>
                                                 <select name="type" id="type" required>
                                                     <option value=""><?php esc_html_e('Select Type', 'property-manager-pro'); ?></option>
-                                                    <option value="Apartment" <?php echo $property && $property->type === 'Apartment' ? 'selected' : ''; ?>>Apartment</option>
-                                                    <option value="Villa" <?php echo $property && $property->type === 'Villa' ? 'selected' : ''; ?>>Villa</option>
-                                                    <option value="Bungalow" <?php echo $property && $property->type === 'Bungalow' ? 'selected' : ''; ?>>Bungalow</option>
-                                                    <option value="Townhouse" <?php echo $property && $property->type === 'Townhouse' ? 'selected' : ''; ?>>Townhouse</option>
-                                                    <option value="Land" <?php echo $property && $property->type === 'Land' ? 'selected' : ''; ?>>Land</option>
-                                                    <option value="Commercial" <?php echo $property && $property->type === 'Commercial' ? 'selected' : ''; ?>>Commercial</option>
+                                                    <option value="Apartment" <?php echo $property && $property->property_type === 'Apartment' ? 'selected' : ''; ?>>Apartment</option>
+                                                    <option value="Villa" <?php echo $property && $property->property_type === 'Villa' ? 'selected' : ''; ?>>Villa</option>
+                                                    <option value="Bungalow" <?php echo $property && $property->property_type === 'Bungalow' ? 'selected' : ''; ?>>Bungalow</option>
+                                                    <option value="Townhouse" <?php echo $property && $property->property_type === 'Townhouse' ? 'selected' : ''; ?>>Townhouse</option>
+                                                    <option value="Land" <?php echo $property && $property->property_type === 'Land' ? 'selected' : ''; ?>>Land</option>
+                                                    <option value="Commercial" <?php echo $property && $property->property_type === 'Commercial' ? 'selected' : ''; ?>>Commercial</option>
                                                 </select>
                                             </td>
                                         </tr>
@@ -601,10 +601,17 @@ class PropertyManager_Admin_Properties {
                                             </td>
                                         </tr>
                                         <tr>
-                                            <th><label for="built_area"><?php esc_html_e('Built Area (m²)', 'property-manager-pro'); ?></label></th>
+                                            <th><label for="surface_area_built"><?php esc_html_e('Built Area (m2)', 'property-manager-pro'); ?></label></th>
                                             <td>
-                                                <input type="number" name="built_area" id="built_area" step="0.01"
-                                                       value="<?php echo $property ? esc_attr($property->built_area) : ''; ?>">
+                                                <input type="number" name="surface_area_built" id="surface_area_built" step="0.01"
+                                                       value="<?php echo $property ? esc_attr($property->surface_area_built) : ''; ?>">
+                                            </td>
+                                        </tr>
+                                        <tr>
+                                            <th><label for="surface_area_plot"><?php esc_html_e('Plot Area (m2)', 'property-manager-pro'); ?></label></th>
+                                            <td>
+                                                <input type="number" name="surface_area_plot" id="surface_area_plot" step="0.01"
+                                                       value="<?php echo $property ? esc_attr($property->surface_area_plot) : ''; ?>">
                                             </td>
                                         </tr>
                                         <tr>
@@ -816,7 +823,8 @@ class PropertyManager_Admin_Properties {
             'province' => sanitize_text_field($_POST['province']),
             'beds' => isset($_POST['beds']) ? intval($_POST['beds']) : 0,
             'baths' => isset($_POST['baths']) ? intval($_POST['baths']) : 0,
-            'built_area' => isset($_POST['built_area']) ? floatval($_POST['built_area']) : null,
+            'surface_area_built' => isset($_POST['surface_area_built']) ? floatval($_POST['surface_area_built']) : null,
+            'surface_area_plot' => isset($_POST['surface_area_plot']) ? floatval($_POST['surface_area_plot']) : null,
             'pool' => isset($_POST['pool']) ? 1 : 0,
             'new_build' => isset($_POST['new_build']) ? 1 : 0,
             'desc_en' => isset($_POST['desc_en']) ? wp_kses_post($_POST['desc_en']) : '',

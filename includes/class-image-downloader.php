@@ -76,6 +76,102 @@ class PropertyManager_ImageDownloader {
         // Cleanup orphaned attachments
         add_action('property_manager_daily_cleanup', array($this, 'cleanup_orphaned_attachments'));
     }
+
+    /**
+     * Get image statistics
+     */
+    public function get_image_stats() {
+        global $wpdb;
+        $images_table = PropertyManager_Database::get_table_name('property_images');
+    
+        $stats = $wpdb->get_row("
+            SELECT 
+                COUNT(*) as total,
+                COALESCE(SUM(CASE WHEN download_status = 'pending' THEN 1 ELSE 0 END), 0) as pending,
+                COALESCE(SUM(CASE WHEN download_status = 'downloaded' THEN 1 ELSE 0 END), 0) as downloaded,
+                COALESCE(SUM(CASE WHEN download_status = 'failed' THEN 1 ELSE 0 END), 0) as failed
+            FROM {$images_table}
+        ", ARRAY_A);
+    
+        if ($wpdb->last_error) {
+            error_log('Property Manager Pro: Error getting image stats - ' . $wpdb->last_error);
+            return array(
+                'total' => 0,
+                'pending' => 0,
+                'downloaded' => 0,
+                'failed' => 0
+            );
+        }
+    
+        return $stats;
+    }
+
+    /**
+     * Process pending images in batches
+     */
+    public function process_pending_images($limit = 10) {
+        global $wpdb;
+        $images_table = PropertyManager_Database::get_table_name('property_images');
+    
+        $limit = absint($limit);
+        $limit = max(1, min(100, $limit)); // Between 1-100
+    
+        $pending_images = $wpdb->get_results($wpdb->prepare(
+            "SELECT * FROM {$images_table} 
+             WHERE download_status = 'pending' 
+             AND download_attempts < %d 
+             ORDER BY created_at ASC 
+             LIMIT %d",
+            self::MAX_RETRIES,
+            $limit
+        ));
+    
+        if (empty($pending_images)) {
+            return 0;
+        }
+    
+        $processed = 0;
+        foreach ($pending_images as $image) {
+            $image_data = array(
+                'image_id' => $image->image_id,
+                'sort_order' => $image->sort_order,
+                'original_url' => $image->original_url
+            );
+        
+            $attachment_id = $this->download_image($image->original_url, $image->property_id, $image_data);
+        
+            if ($attachment_id) {
+                $processed++;
+            }
+        
+            usleep(self::PROCESSING_DELAY_MS);
+        }
+    
+        return $processed;
+    }
+
+    /**
+     * Retry failed downloads
+     */
+    public function retry_failed_downloads($limit = 20) {
+        global $wpdb;
+        $images_table = PropertyManager_Database::get_table_name('property_images');
+    
+        $limit = absint($limit);
+    
+        // Reset failed images to pending
+        $updated = $wpdb->query($wpdb->prepare(
+            "UPDATE {$images_table} 
+             SET download_status = 'pending', 
+                 download_attempts = 0,
+                 error_message = NULL
+             WHERE download_status = 'failed' 
+             LIMIT %d",
+            $limit
+        ));
+    
+        return $updated !== false ? absint($updated) : 0;
+    }
     
     /**
      * Schedule image processing cron job
@@ -115,7 +211,7 @@ class PropertyManager_ImageDownloader {
                 }
             }
             
-            error_log('Property Manager: Downloading image from ' . $image_url);
+            error_log('Property Manager Pro: Downloading image from ' . $image_url);
             
             // Get file extension from URL
             $file_info = $this->get_file_info_from_url($image_url);
@@ -127,12 +223,12 @@ class PropertyManager_ImageDownloader {
                 throw new Exception('Failed to download image to temporary location');
             }
             
-            error_log('Property Manager: Downloaded to temp file: ' . $temp_file);
+            error_log('Property Manager Pro: Downloaded to temp file: ' . $temp_file);
             
             // Validate downloaded image (security checks)
             $this->validate_image($temp_file);
             
-            error_log('Property Manager: Image validated successfully');
+            error_log('Property Manager Pro: Image validated successfully');
             
             // Add property reference to image data
             $image_data['property_id'] = $property_id;
@@ -147,7 +243,7 @@ class PropertyManager_ImageDownloader {
             // Generate unique filename
             $filename = $this->generate_filename($property_id, $image_data, $file_info['extension']);
             
-            error_log('Property Manager: Saving as ' . $filename);
+            error_log('Property Manager Pro: Saving as ' . $filename);
             
             // Save to WordPress media library
             // CRITICAL: This triggers S3 offload plugins automatically!
@@ -157,7 +253,7 @@ class PropertyManager_ImageDownloader {
                 throw new Exception('Failed to save image to media library');
             }
             
-            error_log('Property Manager: Successfully created attachment ID ' . $attachment_id . ' (S3 offload will happen automatically)');
+            error_log('Property Manager Pro: Successfully created attachment ID ' . $attachment_id . ' (S3 offload will happen automatically)');
             
             return $attachment_id;
             
@@ -169,7 +265,7 @@ class PropertyManager_ImageDownloader {
             // FIXED: Always clean up temp file in finally block
             if ($temp_file && file_exists($temp_file)) {
                 @unlink($temp_file);
-                error_log('Property Manager: Cleaned up temp file');
+                error_log('Property Manager Pro: Cleaned up temp file');
             }
         }
     }
@@ -213,11 +309,11 @@ class PropertyManager_ImageDownloader {
         $temp_file = wp_tempnam('property-image-');
         
         if (!$temp_file) {
-            error_log('Property Manager: Failed to create temp file');
+            error_log('Property Manager Pro: Failed to create temp file');
             return false;
         }
         
-        error_log('Property Manager: Downloading to temp file ' . $temp_file);
+        error_log('Property Manager Pro: Downloading to temp file ' . $temp_file);
         
         // Download with wp_remote_get using stream mode
         $response = wp_remote_get($url, array(
@@ -231,21 +327,21 @@ class PropertyManager_ImageDownloader {
         ));
         
         if (is_wp_error($response)) {
-            error_log('Property Manager: Download error - ' . $response->get_error_message());
+            error_log('Property Manager Pro: Download error - ' . $response->get_error_message());
             @unlink($temp_file);
             return false;
         }
         
         $http_code = wp_remote_retrieve_response_code($response);
         if ($http_code !== 200) {
-            error_log('Property Manager: HTTP error code: ' . $http_code);
+            error_log('Property Manager Pro: HTTP error code: ' . $http_code);
             @unlink($temp_file);
             return false;
         }
         
         // Verify file was created and has content
         if (!file_exists($temp_file) || filesize($temp_file) === 0) {
-            error_log('Property Manager: Downloaded file is empty or does not exist');
+            error_log('Property Manager Pro: Downloaded file is empty or does not exist');
             @unlink($temp_file);
             return false;
         }
@@ -393,7 +489,7 @@ class PropertyManager_ImageDownloader {
             throw new Exception('WordPress sideload error: ' . $sideload_result['error']);
         }
         
-        error_log('Property Manager: File sideloaded to ' . $sideload_result['file']);
+        error_log('Property Manager Pro: File sideloaded to ' . $sideload_result['file']);
         
         // Generate image title and alt text
         $image_title = $this->generate_image_title($image_data);
@@ -438,7 +534,7 @@ class PropertyManager_ImageDownloader {
             update_post_meta($attachment_id, '_property_ref', sanitize_text_field($image_data['property_ref']));
         }
         
-        error_log('Property Manager: Attachment metadata saved for attachment ID ' . $attachment_id);
+        error_log('Property Manager Pro: Attachment metadata saved for attachment ID ' . $attachment_id);
         
         return $attachment_id;
     }
@@ -508,7 +604,7 @@ class PropertyManager_ImageDownloader {
             return;
         }
         
-        error_log('Property Manager: Processing ' . count($pending_images) . ' pending images');
+        error_log('Property Manager Pro: Processing ' . count($pending_images) . ' pending images');
         
         foreach ($pending_images as $image) {
             // Mark as downloading
@@ -549,7 +645,7 @@ class PropertyManager_ImageDownloader {
                     array('%d')
                 );
                 
-                error_log('Property Manager: Successfully processed image ID ' . $image->id);
+                error_log('Property Manager Pro: Successfully processed image ID ' . $image->id);
             } else {
                 // Failed - mark as failed if max retries reached
                 $status = ($image->download_attempts + 1 >= self::MAX_RETRIES) ? 'failed' : 'pending';
@@ -565,14 +661,14 @@ class PropertyManager_ImageDownloader {
                     array('%d')
                 );
                 
-                error_log('Property Manager: Failed to process image ID ' . $image->id);
+                error_log('Property Manager Pro: Failed to process image ID ' . $image->id);
             }
             
             // Small delay between downloads to avoid overwhelming the server
             usleep(self::PROCESSING_DELAY_MS);
         }
         
-        error_log('Property Manager: Finished processing image batch');
+        error_log('Property Manager Pro: Finished processing image batch');
     }
     
     /**
@@ -632,7 +728,7 @@ class PropertyManager_ImageDownloader {
                 wp_delete_attachment($attachment_id, true);
             }
             
-            error_log('Property Manager: Cleaned up ' . count($orphaned) . ' orphaned attachments');
+            error_log('Property Manager Pro: Cleaned up ' . count($orphaned) . ' orphaned attachments');
         }
     }
     

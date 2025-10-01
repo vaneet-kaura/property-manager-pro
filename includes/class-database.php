@@ -392,7 +392,7 @@ class PropertyManager_Database {
         update_option(self::DB_VERSION_OPTION, self::DB_VERSION);
         
         // Log database creation
-        error_log('Property Manager: Database tables created successfully');
+        error_log('Property Manager Pro: Database tables created successfully');
         
         return true;
     }
@@ -473,7 +473,7 @@ class PropertyManager_Database {
                 $result = $wpdb->query($constraint['sql']);
                 
                 if ($result === false) {
-                    error_log('Property Manager: Failed to add foreign key ' . $constraint['constraint'] . ' - ' . $wpdb->last_error);
+                    error_log('Property Manager Pro: Failed to add foreign key ' . $constraint['constraint'] . ' - ' . $wpdb->last_error);
                 }
             }
         }
@@ -514,7 +514,7 @@ class PropertyManager_Database {
         // Delete options
         delete_option(self::DB_VERSION_OPTION);
         
-        error_log('Property Manager: Database tables dropped successfully');
+        error_log('Property Manager Pro: Database tables dropped successfully');
         
         return true;
     }
@@ -567,7 +567,7 @@ class PropertyManager_Database {
             // Run any migration scripts
             $this->run_migrations($current_version);
             
-            error_log('Property Manager: Database updated from ' . $current_version . ' to ' . self::DB_VERSION);
+            error_log('Property Manager Pro: Database updated from ' . $current_version . ' to ' . self::DB_VERSION);
         }
     }
 
@@ -594,7 +594,7 @@ class PropertyManager_Database {
         
         // Validate required fields
         if (empty($data['property_id'])) {
-            error_log('Property Manager: Cannot upsert property - property_id is required');
+            error_log('Property Manager Pro: Cannot upsert property - property_id is required');
             return false;
         }
         
@@ -621,7 +621,7 @@ class PropertyManager_Database {
             );
             
             if ($result === false) {
-                error_log('Property Manager: Failed to update property ' . $sanitized_data['property_id'] . ' - ' . $wpdb->last_error);
+                error_log('Property Manager Pro: Failed to update property ' . $sanitized_data['property_id'] . ' - ' . $wpdb->last_error);
                 return false;
             }
             
@@ -638,7 +638,7 @@ class PropertyManager_Database {
             );
             
             if ($result === false) {
-                error_log('Property Manager: Failed to insert property ' . $sanitized_data['property_id'] . ' - ' . $wpdb->last_error);
+                error_log('Property Manager Pro: Failed to insert property ' . $sanitized_data['property_id'] . ' - ' . $wpdb->last_error);
                 return false;
             }
             
@@ -767,7 +767,7 @@ class PropertyManager_Database {
         } catch (Exception $e) {
             // Rollback on error
             $wpdb->query('ROLLBACK');
-            error_log('Property Manager: ' . $e->getMessage());
+            error_log('Property Manager Pro: ' . $e->getMessage());
             return false;
         }
     }
@@ -791,7 +791,7 @@ class PropertyManager_Database {
                 wp_delete_attachment($image->attachment_id, true);
                 
                 error_log(sprintf(
-                    'Property Manager: Deleted attachment %d for property %d (S3 offload compatible)',
+                    'Property Manager Pro: Deleted attachment %d for property %d (S3 offload compatible)',
                     $image->attachment_id,
                     $property_id
                 ));
@@ -828,7 +828,7 @@ class PropertyManager_Database {
         ));
         
         if (!$property_exists) {
-            error_log('Property Manager: Cannot insert images - property ' . $property_id . ' does not exist');
+            error_log('Property Manager Pro: Cannot insert images - property ' . $property_id . ' does not exist');
             return false;
         }
         
@@ -881,7 +881,7 @@ class PropertyManager_Database {
         ));
         
         if (!$property_exists) {
-            error_log('Property Manager: Cannot insert features - property ' . $property_id . ' does not exist');
+            error_log('Property Manager Pro: Cannot insert features - property ' . $property_id . ' does not exist');
             return false;
         }
         
@@ -1056,7 +1056,7 @@ class PropertyManager_Database {
         
         if ($deleted_images || $deleted_features || $deleted_favorites || $deleted_views || $deleted_inquiries) {
             error_log(sprintf(
-                'Property Manager: Cleaned up orphaned records - Images: %d, Features: %d, Favorites: %d, Views: %d, Inquiries: %d',
+                'Property Manager Pro: Cleaned up orphaned records - Images: %d, Features: %d, Favorites: %d, Views: %d, Inquiries: %d',
                 $deleted_images,
                 $deleted_features,
                 $deleted_favorites,
@@ -1146,7 +1146,7 @@ class PropertyManager_Database {
             
             // Log cleanup
             error_log(sprintf(
-                'Property Manager: Cleanup completed - Views: %d, Emails: %d, Security: %d, Searches: %d, Imports: %d, Alerts: %d',
+                'Property Manager Pro: Cleanup completed - Views: %d, Emails: %d, Security: %d, Searches: %d, Imports: %d, Alerts: %d',
                 $deleted_views,
                 $deleted_emails,
                 $deleted_security,
@@ -1158,7 +1158,7 @@ class PropertyManager_Database {
         } catch (Exception $e) {
             // Rollback on error
             $wpdb->query('ROLLBACK');
-            error_log('Property Manager: Cleanup error - ' . $e->getMessage());
+            error_log('Property Manager Pro: Cleanup error - ' . $e->getMessage());
         }
     }
 

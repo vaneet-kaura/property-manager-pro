@@ -156,7 +156,7 @@ class PropertyManager_Admin_Inquiries {
                     i.created_at,
                     i.updated_at,
                     p.ref as property_ref,
-                    p.type as property_type,
+                    p.property_type as property_type,
                     p.town as property_town
                 FROM $inquiries_table i
                 LEFT JOIN $properties_table p ON i.property_id = p.id" . 

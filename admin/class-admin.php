@@ -727,7 +727,7 @@ class PropertyManager_Admin {
         
         // Start import
         $importer = PropertyManager_FeedImporter::get_instance();
-        $result = $importer->import();
+        $result = $importer->import_feed(true);
         
         if ($result) {
             // Log action
@@ -1104,7 +1104,7 @@ class PropertyManager_Admin {
         <div class="wrap">
             <h1><?php esc_html_e('Import Feed', 'property-manager-pro'); ?></h1>
             
-            <div class="card" style="max-width: 800px;">
+            <div class="card" style="max-width: 1000px;">
                 <h2><?php esc_html_e('Manual Import', 'property-manager-pro'); ?></h2>
                 <p><?php esc_html_e('Click the button below to manually import properties from your Kyero feed.', 'property-manager-pro'); ?></p>
                 
@@ -1113,17 +1113,11 @@ class PropertyManager_Admin {
                     <?php esc_html_e('Start Import', 'property-manager-pro'); ?>
                 </button>
                 
-                <div id="import-progress" style="display: none; margin-top: 20px;">
-                    <div class="notice notice-info">
-                        <p><?php esc_html_e('Import in progress...', 'property-manager-pro'); ?></p>
-                    </div>
-                </div>
-                
                 <div id="import-result" style="margin-top: 20px;"></div>
             </div>
             
             <?php if (!empty($import_stats)): ?>
-                <div class="card" style="max-width: 800px; margin-top: 20px;">
+                <div class="card" style="max-width: 1000px; margin-top: 20px;">
                     <h2><?php esc_html_e('Recent Imports', 'property-manager-pro'); ?></h2>
                     <table class="wp-list-table widefat fixed striped">
                         <thead>

@@ -34,6 +34,90 @@ class PropertyManager_Property {
         // But can be useful for WordPress integration
     }
     
+
+    /**
+     * Get property statistics
+     * 
+     * @return array Statistics about properties
+     */
+    public function get_property_stats() {
+        global $wpdb;
+    
+        $table = PropertyManager_Database::get_table_name('properties');
+    
+        try {
+            // Total properties
+            $total = $wpdb->get_var("SELECT COUNT(*) FROM $table");
+            $total = $total !== null ? absint($total) : 0;
+        
+            // Active properties
+            $active = $wpdb->get_var($wpdb->prepare(
+                "SELECT COUNT(*) FROM $table WHERE status = %s",
+                'active'
+            ));
+            $active = $active !== null ? absint($active) : 0;
+        
+            // Average price (only active properties with price > 0)
+            $avg_price = $wpdb->get_var($wpdb->prepare(
+                "SELECT AVG(price) FROM $table WHERE status = %s AND price > 0",
+                'active'
+            ));
+            $avg_price = $avg_price !== null ? floatval($avg_price) : 0;
+        
+            // Properties added this month
+            $first_day_of_month = date('Y-m-01 00:00:00');
+            $new_this_month = $wpdb->get_var($wpdb->prepare(
+                "SELECT COUNT(*) FROM $table WHERE created_at >= %s",
+                $first_day_of_month
+            ));
+            $new_this_month = $new_this_month !== null ? absint($new_this_month) : 0;
+        
+            // Properties by type
+            $by_type_results = $wpdb->get_results($wpdb->prepare(
+                "SELECT property_type, COUNT(*) as count 
+                 FROM $table 
+                 WHERE status = %s AND property_type IS NOT NULL AND property_type != '' 
+                 GROUP BY property_type 
+                 ORDER BY count DESC 
+                 LIMIT 10",
+                'active'
+            ), ARRAY_A);
+        
+            $by_type = array();
+            if ($by_type_results && is_array($by_type_results)) {
+                foreach ($by_type_results as $row) {
+                    $type = sanitize_text_field($row['property_type']);
+                    $count = absint($row['count']);
+                    if ($type && $count > 0) {
+                        $by_type[] = (object)['type' => $type, 'count' => $count];
+                    }
+                }
+            }
+        
+            // Check for database errors
+            if ($wpdb->last_error) {
+                error_log('Property Manager Pro: Database error in get_property_stats(): ' . $wpdb->last_error);
+            }
+        
+            return array(
+                'total' => $total,
+                'active' => $active,
+                'avg_price' => $avg_price,
+                'new_this_month' => $new_this_month,
+                'by_type' => $by_type
+            );
+        
+        } catch (Exception $e) {
+            error_log('Property Manager Pro: Exception in get_property_stats(): ' . $e->getMessage());
+            return array(
+                'total' => 0,
+                'active' => 0,
+                'avg_price' => 0,
+                'new_this_month' => 0,
+                'by_type' => array()
+            );
+        }
+    }
     /**
      * Get property by ID
      */

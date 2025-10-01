@@ -60,18 +60,18 @@ class PropertyManager_FeedImporter {
     public function import_feed($manual = false) {
         // Validate feed URL
         if (empty($this->feed_url)) {
-            error_log('Property Manager: No feed URL configured');
+            error_log('Property Manager Pro: No feed URL configured');
             return false;
         }
         
         if (!filter_var($this->feed_url, FILTER_VALIDATE_URL)) {
-            error_log('Property Manager: Invalid feed URL format');
+            error_log('Property Manager Pro: Invalid feed URL format');
             return false;
         }
         
         // Prevent concurrent imports
         if (get_transient('property_manager_import_in_progress')) {
-            error_log('Property Manager: Import already in progress, skipping...');
+            error_log('Property Manager Pro: Import already in progress, skipping...');
             return false;
         }
         
@@ -113,7 +113,7 @@ class PropertyManager_FeedImporter {
             // Log success
             if (!$manual) {
                 error_log(sprintf(
-                    'Property Manager: Feed import completed successfully. Imported: %d, Updated: %d, Failed: %d',
+                    'Property Manager Pro: Feed import completed successfully. Imported: %d, Updated: %d, Failed: %d',
                     $result['imported'],
                     $result['updated'],
                     $result['failed']
@@ -129,13 +129,37 @@ class PropertyManager_FeedImporter {
             // Complete import log with error
             $this->complete_import_log('failed', null, $e->getMessage());
             
-            error_log('Property Manager: Feed import failed - ' . $e->getMessage());
+            error_log('Property Manager Pro: Feed import failed - ' . $e->getMessage());
             
             // Release lock
             delete_transient('property_manager_import_in_progress');
             
             return false;
         }
+    }
+
+    /**
+     * Get import statistics
+     */
+    public function get_import_stats($limit = 10) {
+        global $wpdb;
+    
+        $table = PropertyManager_Database::get_table_name('import_logs');
+        $limit = absint($limit);
+    
+        $logs = $wpdb->get_results($wpdb->prepare(
+            "SELECT * FROM {$table} 
+             ORDER BY started_at DESC 
+             LIMIT %d",
+            $limit
+        ), OBJECT);
+    
+        if ($wpdb->last_error) {
+            error_log('Property Manager Pro: Error getting import stats - ' . $wpdb->last_error);
+            return array();
+        }
+    
+        return $logs;
     }
     
     /**
@@ -183,13 +207,13 @@ class PropertyManager_FeedImporter {
     private function validate_xml_structure($xml_data) {
         // Check for XML declaration
         if (strpos(trim($xml_data), '<?xml') !== 0) {
-            error_log('Property Manager: Missing XML declaration');
+            error_log('Property Manager Pro: Missing XML declaration');
             return false;
         }
         
         // Check for basic XML structure
         if (strpos($xml_data, '<root>') === false && strpos($xml_data, '<properties>') === false) {
-            error_log('Property Manager: Invalid XML root element');
+            error_log('Property Manager Pro: Invalid XML root element');
             return false;
         }
         
@@ -244,14 +268,14 @@ class PropertyManager_FeedImporter {
      */
     private function validate_feed_version($xml) {
         if (!isset($xml->kyero->feed_version)) {
-            error_log('Property Manager: Warning - Feed version not specified');
+            error_log('Property Manager Pro: Warning - Feed version not specified');
             return;
         }
         
         $feed_version = (string) $xml->kyero->feed_version;
         
         if ($feed_version !== '3') {
-            error_log('Property Manager: Warning - Unexpected feed version: ' . $feed_version . ' (expected 3)');
+            error_log('Property Manager Pro: Warning - Unexpected feed version: ' . $feed_version . ' (expected 3)');
         }
     }
     
@@ -266,14 +290,14 @@ class PropertyManager_FeedImporter {
         $processed_ids = array();
         
         if (!isset($xml->property) || count($xml->property) === 0) {
-            error_log('Property Manager: No properties found in feed');
+            error_log('Property Manager Pro: No properties found in feed');
             return array('imported' => 0, 'updated' => 0, 'failed' => 0, 'total' => 0);
         }
         
         $total_properties = count($xml->property);
         
         if ($total_properties > self::MAX_PROPERTIES_PER_BATCH) {
-            error_log('Property Manager: Warning - Feed contains ' . $total_properties . ' properties (max recommended: ' . self::MAX_PROPERTIES_PER_BATCH . ')');
+            error_log('Property Manager Pro: Warning - Feed contains ' . $total_properties . ' properties (max recommended: ' . self::MAX_PROPERTIES_PER_BATCH . ')');
         }
         
         global $wpdb;
@@ -288,13 +312,13 @@ class PropertyManager_FeedImporter {
                 
                 if (!$property_data || empty($property_data['property_id'])) {
                     $failed++;
-                    error_log('Property Manager: Skipping property - invalid data');
+                    error_log('Property Manager Pro: Skipping property - invalid data');
                     continue;
                 }
                 
                 // Check for duplicate in current batch
                 if (in_array($property_data['property_id'], $processed_ids)) {
-                    error_log('Property Manager: Duplicate property in feed: ' . $property_data['property_id']);
+                    error_log('Property Manager Pro: Duplicate property in feed: ' . $property_data['property_id']);
                     continue;
                 }
                 
@@ -370,7 +394,7 @@ class PropertyManager_FeedImporter {
                 
             } catch (Exception $e) {
                 $failed++;
-                error_log('Property Manager: Failed to import property - ' . $e->getMessage());
+                error_log('Property Manager Pro: Failed to import property - ' . $e->getMessage());
                 
                 // Ensure rollback if transaction was started
                 if ($transaction_started) {
@@ -459,7 +483,7 @@ class PropertyManager_FeedImporter {
             return $data;
             
         } catch (Exception $e) {
-            error_log('Property Manager: Error parsing property - ' . $e->getMessage());
+            error_log('Property Manager Pro: Error parsing property - ' . $e->getMessage());
             return null;
         }
     }
@@ -622,14 +646,14 @@ class PropertyManager_FeedImporter {
             
             // Validate image URL
             if (empty($image_url) || !filter_var($image_url, FILTER_VALIDATE_URL)) {
-                error_log('Property Manager: Invalid image URL: ' . $image_url);
+                error_log('Property Manager Pro: Invalid image URL: ' . $image_url);
                 continue;
             }
             
             // Validate URL scheme (only http/https)
             $parsed_url = parse_url($image_url);
             if (!isset($parsed_url['scheme']) || !in_array($parsed_url['scheme'], array('http', 'https'))) {
-                error_log('Property Manager: Invalid image URL scheme: ' . $image_url);
+                error_log('Property Manager Pro: Invalid image URL scheme: ' . $image_url);
                 continue;
             }
             
@@ -805,7 +829,7 @@ class PropertyManager_FeedImporter {
         $affected_rows = $wpdb->rows_affected;
         
         if ($affected_rows > 0) {
-            error_log('Property Manager: Marked ' . $affected_rows . ' old properties as inactive');
+            error_log('Property Manager Pro: Marked ' . $affected_rows . ' old properties as inactive');
         }
     }
 }
