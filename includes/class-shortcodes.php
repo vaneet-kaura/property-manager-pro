@@ -1,6 +1,8 @@
 <?php
 /**
- * Shortcodes class for Property Manager Pro
+ * Shortcodes Handler Class - Property Manager Pro
+ * 
+ * Handles all shortcodes for the plugin with WordPress standards and security measures
  * 
  * @package PropertyManagerPro
  */
@@ -14,6 +16,9 @@ class PropertyManager_Shortcodes {
     
     private static $instance = null;
     
+    /**
+     * Get singleton instance
+     */
     public static function get_instance() {
         if (null === self::$instance) {
             self::$instance = new self();
@@ -21,719 +26,498 @@ class PropertyManager_Shortcodes {
         return self::$instance;
     }
     
-    private function __construct() {
-        add_action('init', array($this, 'init_shortcodes'));
-    }
-    
     /**
-     * Initialize all shortcodes
+     * Constructor - Register all shortcodes
      */
-    public function init_shortcodes() {
-        // Search shortcodes        
-        add_shortcode('property_search_form', array($this, 'property_search_form'));
-        add_shortcode('property_advanced_search_form', array($this, 'property_advanced_search_form'));
-        add_shortcode('property_search_results', array($this, 'property_search_results'));
-        
-        // User management shortcodes
-        add_shortcode('property_user_dashboard', array($this, 'property_user_dashboard'));
-        add_shortcode('property_user_favorites', array($this, 'property_user_favorites'));
-        add_shortcode('property_saved_searches', array($this, 'property_saved_searches'));
-        add_shortcode('property_alerts_management', array($this, 'property_alerts_management'));
-        add_shortcode('property_last_viewed', array($this, 'property_last_viewed'));
+    private function __construct() {
+        // Basic shortcodes
+        add_shortcode('property_search_form', array($this, 'render_basic_search_form'));
+        add_shortcode('property_advanced_search_form', array($this, 'render_advanced_search_form'));
+        add_shortcode('property_search_results', array($this, 'render_search_results'));
         
         // Property display shortcodes
-        add_shortcode('property_list', array($this, 'property_list'));
-        add_shortcode('property_featured', array($this, 'property_featured'));
-        add_shortcode('property_detail', array($this, 'property_detail'));
-        add_shortcode('property_contact_form', array($this, 'property_contact_form'));
+        add_shortcode('property_grid', array($this, 'render_property_grid'));
+        add_shortcode('property_list', array($this, 'render_property_list'));
+        add_shortcode('property_featured', array($this, 'render_featured_properties'));
+        add_shortcode('property_single', array($this, 'render_single_property'));
         
-        // Alert subscription shortcode
-        add_shortcode('property_alert_signup', array($this, 'property_alert_signup'));
+        // User-related shortcodes
+        add_shortcode('property_user_dashboard', array($this, 'render_user_dashboard'));
+        add_shortcode('property_user_favorites', array($this, 'render_user_favorites'));
+        add_shortcode('property_saved_searches', array($this, 'render_saved_searches'));
+        add_shortcode('property_alerts_management', array($this, 'render_alerts_management'));
+        add_shortcode('property_last_viewed', array($this, 'render_last_viewed'));
+        
+        // Authentication shortcodes
+        add_shortcode('property_login_form', array($this, 'render_login_form'));
+        add_shortcode('property_register_form', array($this, 'render_register_form'));
+        add_shortcode('property_reset_password', array($this, 'render_reset_password_form'));
+        
+        // Misc shortcodes
+        add_shortcode('property_contact_form', array($this, 'render_contact_form'));
+        add_shortcode('property_alert_signup', array($this, 'render_alert_signup_form'));
     }
     
     /**
-     * Basic property search form
+     * Render Basic Search Form
+     * Usage: [property_search_form]
      */
-    public function property_search_form($atts) {
+    public function render_basic_search_form($atts) {
         $atts = shortcode_atts(array(
-            'show_location' => true,
-            'show_advanced_toggle' => false,
-            'show_type' => true,
-            'show_beds' => true,
-            'show_price' => true,
-            'ajax' => true
-        ), $atts);
+            'show_title' => 'yes',
+            'title' => __('Search Properties', 'property-manager-pro'),
+            'button_text' => __('Search', 'property-manager-pro'),
+            'placeholder' => __('Location, Property Type...', 'property-manager-pro'),
+            'action' => '',
+            'class' => ''
+        ), $atts, 'property_search_form');
+        
+        ob_start();
         
         $search_forms = PropertyManager_SearchForms::get_instance();
-        return $search_forms->basic_search_form($atts);
+        echo $search_forms->render_basic_search_form($atts);
+        
+        return ob_get_clean();
     }
     
     /**
-     * Advanced property search form
+     * Render Advanced Search Form
+     * Usage: [property_advanced_search_form]
      */
-    public function property_advanced_search_form($atts) {
+    public function render_advanced_search_form($atts) {
         $atts = shortcode_atts(array(
-            'ajax' => false,
-            'show_map' => true
-        ), $atts);
+            'show_title' => 'yes',
+            'title' => __('Advanced Property Search', 'property-manager-pro'),
+            'button_text' => __('Search', 'property-manager-pro'),
+            'action' => '',
+            'class' => ''
+        ), $atts, 'property_advanced_search_form');
+        
+        ob_start();
         
         $search_forms = PropertyManager_SearchForms::get_instance();
-        return $search_forms->advanced_search_form($atts);
-    }
-    
-    /**
-     * Property search results
-     */
-    public function property_search_results($atts) {
-        $atts = shortcode_atts(array(
-            'per_page' => get_option('property_manager_options')['results_per_page'] ?? 20,
-            'view' => get_option('property_manager_options')['default_view'] ?? 'grid',
-            'show_map' => get_option('property_manager_options')['enable_map'] ?? true,
-            'show_sorting' => true,
-            'show_filters' => true,
-            'ajax' => true
-        ), $atts);
+        echo $search_forms->render_advanced_search_form($atts);
         
-        ob_start();
-        $this->render_search_results($atts);
         return ob_get_clean();
     }
     
     /**
-     * User dashboard
+     * Render Search Results
+     * Usage: [property_search_results]
      */
-    public function property_user_dashboard($atts) {
-        if (!is_user_logged_in()) {
-            return $this->render_login_required_message();
-        }
-        
+    public function render_search_results($atts) {
         $atts = shortcode_atts(array(
-            'show_stats' => true,
-            'show_recent_activity' => true
-        ), $atts);
-        
-        ob_start();
-        $this->render_user_dashboard($atts);
-        return ob_get_clean();
-    }
-    
-    /**
-     * User favorites
-     */
-    public function property_user_favorites($atts) {
-        if (!is_user_logged_in()) {
-            return $this->render_login_required_message();
-        }
-        
-        $atts = shortcode_atts(array(
-            'per_page' => 20,
-            'view' => 'grid'
-        ), $atts);
-        
-        $favorites = PropertyManager_Favorites::get_instance();
-        return $favorites->render_user_favorites($atts);
-    }
-    
-    /**
-     * Saved searches
-     */
-    public function property_saved_searches($atts) {
-        if (!is_user_logged_in()) {
-            return $this->render_login_required_message();
-        }
-        
-        $atts = shortcode_atts(array(
-            'show_alerts' => true
-        ), $atts);
-        
-        ob_start();
-        $this->render_saved_searches($atts);
-        return ob_get_clean();
-    }
-    
-    /**
-     * Property alerts management
-     */
-    public function property_alerts_management($atts) {
-        $atts = shortcode_atts(array(
-            'require_login' => false
-        ), $atts);
-        
-        if ($atts['require_login'] && !is_user_logged_in()) {
-            return $this->render_login_required_message();
-        }
-        
-        $alerts = PropertyManager_Alerts::get_instance();
-        return $alerts->render_alerts_management($atts);
-    }
-    
-    /**
-     * Last viewed properties
-     */
-    public function property_last_viewed($atts) {
-        $atts = shortcode_atts(array(
-            'limit' => 10,
-            'view' => 'list'
-        ), $atts);
-        
-        ob_start();
-        $this->render_last_viewed_properties($atts);
-        return ob_get_clean();
-    }
-    
-    /**
-     * Property list with filters
-     */
-    public function property_list($atts) {
-        $atts = shortcode_atts(array(
-            'limit' => 20,
-            'type' => '',
-            'location' => '',
-            'min_price' => '',
-            'max_price' => '',
-            'beds' => '',
-            'featured' => false,
             'view' => 'grid',
-            'show_pagination' => true,
-            'orderby' => 'date',
-            'order' => 'DESC'
-        ), $atts);
+            'per_page' => 12,
+            'orderby' => 'created_at',
+            'order' => 'DESC',
+            'show_filters' => 'yes',
+            'show_pagination' => 'yes',
+            'show_view_switcher' => 'yes',
+            'class' => ''
+        ), $atts, 'property_search_results');
         
-        ob_start();
-        $this->render_property_list($atts);
-        return ob_get_clean();
-    }
-    
-    /**
-     * Featured properties
-     */
-    public function property_featured($atts) {
-        $atts = shortcode_atts(array(
-            'limit' => 6,
-            'view' => 'grid',
-            'show_all_link' => true
-        ), $atts);
+        // Sanitize attributes
+        $view = sanitize_text_field($atts['view']);
+        $per_page = absint($atts['per_page']);
+        $orderby = sanitize_text_field($atts['orderby']);
+        $order = strtoupper(sanitize_text_field($atts['order']));
         
-        $atts['featured'] = true;
-        return $this->property_list($atts);
-    }
-    
-    /**
-     * Single property detail
-     */
-    public function property_detail($atts) {
-        $atts = shortcode_atts(array(
-            'id' => get_query_var('property_id', 0),
-            'show_contact_form' => true,
-            'show_map' => true,
-            'show_similar' => true
-        ), $atts);
+        // Validate values
+        if (!in_array($view, array('grid', 'list', 'map'))) {
+            $view = 'grid';
+        }
+        if (!in_array($order, array('ASC', 'DESC'))) {
+            $order = 'DESC';
+        }
+        if ($per_page < 1 || $per_page > 100) {
+            $per_page = 12;
+        }
         
-        if (empty($atts['id'])) {
-            return '<p>' . __('Property not found.', 'property-manager-pro') . '</p>';
+        // Get search parameters
+        $search_params = $this->get_sanitized_search_params();
+        $search_params['per_page'] = $per_page;
+        $search_params['orderby'] = $orderby;
+        $search_params['order'] = $order;
+        $search_params['page'] = isset($_GET['paged']) ? max(1, absint($_GET['paged'])) : 1;
+        
+        // Override view if in URL
+        if (isset($_GET['view']) && in_array($_GET['view'], array('grid', 'list', 'map'))) {
+            $view = sanitize_text_field($_GET['view']);
         }
         
         ob_start();
-        $this->render_property_detail($atts);
-        return ob_get_clean();
-    }
-    
-    /**
-     * Property contact form
-     */
-    public function property_contact_form($atts) {
-        $atts = shortcode_atts(array(
-            'property_id' => get_query_var('property_id', 0),
-            'show_property_info' => true
-        ), $atts);
         
-        ob_start();
-        $this->render_property_contact_form($atts);
-        return ob_get_clean();
-    }
-    
-    /**
-     * Property alert signup form
-     */
-    public function property_alert_signup($atts) {
-        $atts = shortcode_atts(array(
-            'title' => __('Get Property Alerts', 'property-manager-pro'),
-            'description' => __('Sign up to receive email alerts for properties matching your criteria.', 'property-manager-pro')
-        ), $atts);
+        $property_search = PropertyManager_Search::get_instance();
+        $results = $property_search->search_properties($search_params);
         
-        ob_start();
-        $this->render_alert_signup_form($atts);
-        return ob_get_clean();
-    }
-    
-    /**
-     * Render search results
-     */
-    private function render_search_results($atts) {
-        $search = PropertyManager_Search::get_instance();
-        $results = $search->search_properties();        
         ?>
-        <div id="property-search-results" class="container-fluid">
-            <!-- Search Controls -->
-            <div class="card border-0 shadow-sm mb-4">
-                <div class="card-body">
-                    <div class="row align-items-center">
-                        <div class="col-md-6">
-                            <h5 class="mb-0 text-primary">
-                                <i class="fas fa-search me-2"></i>
-                                <?php printf(__('Found %d properties', 'property-manager-pro'), $results['total']); ?>
+        <div class="property-search-results-wrapper <?php echo esc_attr($atts['class']); ?>">
+            
+            <?php if ($atts['show_view_switcher'] === 'yes' || $atts['show_filters'] === 'yes'): ?>
+                <div class="search-results-header mb-4">
+                    <div class="d-flex justify-content-between align-items-center flex-wrap gap-3">
+                        <div class="results-count">
+                            <h5 class="mb-0">
+                                <?php 
+                                printf(
+                                    esc_html(_n('%s Property Found', '%s Properties Found', $results['total'], 'property-manager-pro')),
+                                    '<strong>' . number_format_i18n($results['total']) . '</strong>'
+                                );
+                                ?>
                             </h5>
                         </div>
-                        <div class="col-md-6">
-                            <div class="d-flex justify-content-end align-items-center gap-2">
-                                <?php if ($atts['show_sorting']): ?>
-                                    <select name="orderby" class="form-select form-select-sm" style="width: auto;" onchange="this.form.submit()">
-                                        <option value="date"><?php _e('Newest First', 'property-manager-pro'); ?></option>
-                                        <option value="price-asc"><?php _e('Price: Low to High', 'property-manager-pro'); ?></option>
-                                        <option value="price-desc"><?php _e('Price: High to Low', 'property-manager-pro'); ?></option>
-                                        <option value="beds"><?php _e('Most Bedrooms', 'property-manager-pro'); ?></option>
-                                    </select>
-                                <?php endif; ?>
-                                
-                                <div class="btn-group btn-group-sm" role="group" aria-label="View Options">
-                                    <input type="radio" class="btn-check" name="view-options" id="view-grid" autocomplete="off" checked>
-                                    <label class="btn btn-outline-primary view-toggle" for="view-grid" data-view="grid">
-                                        <i class="fas fa-th me-1"></i>
-                                        <span class="d-none d-sm-inline"><?php _e('Grid', 'property-manager-pro'); ?></span>
-                                    </label>
-                                    
-                                    <input type="radio" class="btn-check" name="view-options" id="view-list" autocomplete="off">
-                                    <label class="btn btn-outline-primary view-toggle" for="view-list" data-view="list">
-                                        <i class="fas fa-list me-1"></i>
-                                        <span class="d-none d-sm-inline"><?php _e('List', 'property-manager-pro'); ?></span>
-                                    </label>
-                                    
-                                    <?php if ($atts['show_map']): ?>
-                                    <input type="radio" class="btn-check" name="view-options" id="view-map" autocomplete="off">
-                                    <label class="btn btn-outline-primary view-toggle" for="view-map" data-view="map">
-                                        <i class="fas fa-map me-1"></i>
-                                        <span class="d-none d-sm-inline"><?php _e('Map', 'property-manager-pro'); ?></span>
-                                    </label>
-                                    <?php endif; ?>
-                                </div>
+                        
+                        <?php if ($atts['show_view_switcher'] === 'yes'): ?>
+                            <div class="view-switcher btn-group" role="group">
+                                <a href="<?php echo esc_url(add_query_arg('view', 'grid')); ?>" 
+                                   class="btn btn-outline-secondary <?php echo $view === 'grid' ? 'active' : ''; ?>">
+                                    <i class="fas fa-th"></i>
+                                </a>
+                                <a href="<?php echo esc_url(add_query_arg('view', 'list')); ?>" 
+                                   class="btn btn-outline-secondary <?php echo $view === 'list' ? 'active' : ''; ?>">
+                                    <i class="fas fa-list"></i>
+                                </a>
+                                <a href="<?php echo esc_url(add_query_arg('view', 'map')); ?>" 
+                                   class="btn btn-outline-secondary <?php echo $view === 'map' ? 'active' : ''; ?>">
+                                    <i class="fas fa-map"></i>
+                                </a>
                             </div>
+                        <?php endif; ?>
+                        
+                        <div class="sort-options">
+                            <form method="get" class="d-inline">
+                                <?php foreach ($_GET as $key => $value): ?>
+                                    <?php if ($key !== 'orderby' && $key !== 'order'): ?>
+                                        <input type="hidden" name="<?php echo esc_attr($key); ?>" value="<?php echo esc_attr($value); ?>">
+                                    <?php endif; ?>
+                                <?php endforeach; ?>
+                                
+                                <select name="sort" class="form-select" onchange="this.form.submit()">
+                                    <option value="created_at-DESC" <?php selected($orderby . '-' . $order, 'created_at-DESC'); ?>>
+                                        <?php esc_html_e('Newest First', 'property-manager-pro'); ?>
+                                    </option>
+                                    <option value="price-ASC" <?php selected($orderby . '-' . $order, 'price-ASC'); ?>>
+                                        <?php esc_html_e('Price: Low to High', 'property-manager-pro'); ?>
+                                    </option>
+                                    <option value="price-DESC" <?php selected($orderby . '-' . $order, 'price-DESC'); ?>>
+                                        <?php esc_html_e('Price: High to Low', 'property-manager-pro'); ?>
+                                    </option>
+                                </select>
+                            </form>
                         </div>
                     </div>
                 </div>
-            </div>
+            <?php endif; ?>
             
-            <!-- Properties Container -->
-            <div class="properties-container" data-view="<?php echo esc_attr($atts['view']); ?>">
-                <?php if ($results['properties']): ?>
-                    <div class="properties-grid row g-4">
+            <?php if (empty($results['properties'])): ?>
+                <div class="alert alert-info">
+                    <h4><?php esc_html_e('No Properties Found', 'property-manager-pro'); ?></h4>
+                    <p><?php esc_html_e('Try adjusting your search criteria.', 'property-manager-pro'); ?></p>
+                </div>
+            <?php else: ?>
+                
+                <?php if ($view === 'grid'): ?>
+                    <div class="row row-cols-1 row-cols-md-2 row-cols-lg-3 g-4 property-grid">
                         <?php foreach ($results['properties'] as $property): ?>
-                            <div class="property-item col-xxl-6 col-xl-4 col-lg-6 col-md-6">
+                            <div class="col">
                                 <?php $this->render_property_card($property); ?>
                             </div>
                         <?php endforeach; ?>
                     </div>
                     
-                    <?php if ($results['total'] > $atts['per_page']): ?>
-                        <nav aria-label="Properties pagination" class="mt-5">
-                            <div class="d-flex justify-content-center">
-                                <?php echo paginate_links(array(
-                                    'total' => ceil($results['total'] / $atts['per_page']),
-                                    'current' => max(1, get_query_var('paged')),
-                                    'format' => '?paged=%#%',
-                                    'prev_text' => '<i class="fas fa-chevron-left"></i> ' . __('Previous', 'property-manager-pro'),
-                                    'next_text' => __('Next', 'property-manager-pro') . ' <i class="fas fa-chevron-right"></i>',
-                                    'before_page_number' => '<span class="visually-hidden">' . __('Page', 'property-manager-pro') . ' </span>',
-                                    'class' => 'pagination pagination-lg'
-                                )); ?>
-                            </div>
-                        </nav>
-                    <?php endif; ?>
-                <?php else: ?>
-                    <div class="alert alert-info text-center py-5" role="alert">
-                        <i class="fas fa-search fa-3x mb-3 text-muted"></i>
-                        <h4 class="alert-heading"><?php _e('No Properties Found', 'property-manager-pro'); ?></h4>
-                        <p class="mb-0"><?php _e('Try adjusting your search criteria to find more properties.', 'property-manager-pro'); ?></p>
-                        <hr>
-                        <button class="btn btn-primary mt-2" onclick="history.back()">
-                            <i class="fas fa-arrow-left me-1"></i>
-                            <?php _e('Back to Search', 'property-manager-pro'); ?>
-                        </button>
-                    </div>
-                <?php endif; ?>
-            </div>
-            
-            <?php if ($atts['show_map']): ?>
-                <div id="properties-map" class="card mt-4" style="display: none;">
-                    <div class="card-header bg-primary text-white">
-                        <h5 class="mb-0">
-                            <i class="fas fa-map-marked-alt me-2"></i>
-                            <?php _e('Properties Map View', 'property-manager-pro'); ?>
-                        </h5>
-                    </div>
-                    <div class="card-body p-0">
-                        <div style="height: 500px;" id="map-container"></div>
-                    </div>
-                </div>
-            <?php endif; ?>
-        </div>
-        <?php
-    }
-    
-    /**
-     * Render user dashboard
-     */
-    private function render_user_dashboard($atts) {
-        $user_id = get_current_user_id();
-        $current_user = wp_get_current_user();
-        $favorites = PropertyManager_Favorites::get_instance();
-        $alerts = PropertyManager_Alerts::get_instance();
-        
-        $stats = array(
-            'favorites' => $favorites->get_favorites_count($user_id),
-            'saved_searches' => $this->get_user_saved_searches_count($user_id),
-            'active_alerts' => $alerts->get_alerts_count($user_id)
-        );
-        
-        ?>
-        <div class="container-fluid">
-            <!-- Welcome Section -->
-            <div class="row mb-4">
-                <div class="col-12">
-                    <div class="card border-0 shadow-sm bg-primary text-white">
-                        <div class="card-body py-4">
-                            <div class="row align-items-center">
-                                <div class="col-md-8">
-                                    <h2 class="mb-1">
-                                        <i class="fas fa-tachometer-alt me-2"></i>
-                                        <?php printf(__('Welcome, %s!', 'property-manager-pro'), $current_user->display_name); ?>
-                                    </h2>
-                                    <p class="mb-0 opacity-75"><?php _e('Manage your property searches, favorites, and alerts from your dashboard.', 'property-manager-pro'); ?></p>
-                                </div>
-                                <div class="col-md-4 text-md-end">
-                                    <i class="fas fa-user-circle fa-4x opacity-50"></i>
-                                </div>
-                            </div>
-                        </div>
-                    </div>
-                </div>
-            </div>
-
-            <?php if ($atts['show_stats']): ?>
-                <!-- Statistics Cards -->
-                <div class="row g-4 mb-5">
-                    <div class="col-md-4">
-                        <div class="card border-0 shadow-sm h-100">
-                            <div class="card-body text-center p-4">
-                                <div class="feature-icon bg-danger bg-opacity-10 text-danger rounded-circle d-inline-flex align-items-center justify-content-center mb-3" style="width: 60px; height: 60px;">
-                                    <i class="fas fa-heart fa-lg"></i>
-                                </div>
-                                <h3 class="display-6 fw-bold text-danger mb-2"><?php echo $stats['favorites']; ?></h3>
-                                <h6 class="text-muted mb-3"><?php _e('Favorite Properties', 'property-manager-pro'); ?></h6>
-                                <a href="<?php echo get_permalink(get_option('property_manager_pages')['user_favorites']); ?>" 
-                                   class="btn btn-outline-danger btn-sm">
-                                    <i class="fas fa-eye me-1"></i>
-                                    <?php _e('View All', 'property-manager-pro'); ?>
-                                </a>
-                            </div>
-                        </div>
+                <?php elseif ($view === 'list'): ?>
+                    <div class="property-list">
+                        <?php foreach ($results['properties'] as $property): ?>
+                            <?php $this->render_property_list_item($property); ?>
+                        <?php endforeach; ?>
                     </div>
                     
-                    <div class="col-md-4">
-                        <div class="card border-0 shadow-sm h-100">
-                            <div class="card-body text-center p-4">
-                                <div class="feature-icon bg-success bg-opacity-10 text-success rounded-circle d-inline-flex align-items-center justify-content-center mb-3" style="width: 60px; height: 60px;">
-                                    <i class="fas fa-search fa-lg"></i>
-                                </div>
-                                <h3 class="display-6 fw-bold text-success mb-2"><?php echo $stats['saved_searches']; ?></h3>
-                                <h6 class="text-muted mb-3"><?php _e('Saved Searches', 'property-manager-pro'); ?></h6>
-                                <a href="<?php echo get_permalink(get_option('property_manager_pages')['saved_searches']); ?>" 
-                                   class="btn btn-outline-success btn-sm">
-                                    <i class="fas fa-cog me-1"></i>
-                                    <?php _e('Manage', 'property-manager-pro'); ?>
-                                </a>
+                <?php elseif ($view === 'map'): ?>
+                    <div class="property-map-view">
+                        <div id="properties-map" style="height: 600px;" data-properties='<?php echo esc_attr(wp_json_encode($this->prepare_map_data($results['properties']))); ?>'></div>
+                        
+                        <div class="map-properties-list mt-4">
+                            <div class="row row-cols-1 row-cols-md-2 g-3">
+                                <?php foreach ($results['properties'] as $property): ?>
+                                    <div class="col">
+                                        <?php $this->render_property_card($property, 'compact'); ?>
+                                    </div>
+                                <?php endforeach; ?>
                             </div>
                         </div>
-                    </div>
-                    
-                    <div class="col-md-4">
-                        <div class="card border-0 shadow-sm h-100">
-                            <div class="card-body text-center p-4">
-                                <div class="feature-icon bg-warning bg-opacity-10 text-warning rounded-circle d-inline-flex align-items-center justify-content-center mb-3" style="width: 60px; height: 60px;">
-                                    <i class="fas fa-bell fa-lg"></i>
-                                </div>
-                                <h3 class="display-6 fw-bold text-warning mb-2"><?php echo $stats['active_alerts']; ?></h3>
-                                <h6 class="text-muted mb-3"><?php _e('Property Alerts', 'property-manager-pro'); ?></h6>
-                                <a href="<?php echo get_permalink(get_option('property_manager_pages')['property_alerts']); ?>" 
-                                   class="btn btn-outline-warning btn-sm">
-                                    <i class="fas fa-cog me-1"></i>
-                                    <?php _e('Manage', 'property-manager-pro'); ?>
-                                </a>
-                            </div>
-                        </div>
-                    </div>
-                </div>
-            <?php endif; ?>
-            
-            <!-- Dashboard Menu -->
-            <div class="row">
-                <div class="col-12">
-                    <div class="card border-0 shadow-sm">
-                        <div class="card-header bg-light border-0">
-                            <h5 class="mb-0">
-                                <i class="fas fa-list me-2"></i>
-                                <?php _e('Quick Actions', 'property-manager-pro'); ?>
-                            </h5>
-                        </div>
-                        <div class="card-body p-0">
-                            <div class="list-group list-group-flush">
-                                <a href="<?php echo get_permalink(get_option('property_manager_pages')['user_favorites']); ?>" 
-                                   class="list-group-item list-group-item-action d-flex align-items-center py-3">
-                                    <div class="feature-icon bg-danger bg-opacity-10 text-danger rounded me-3 d-flex align-items-center justify-content-center" style="width: 40px; height: 40px;">
-                                        <i class="fas fa-heart"></i>
-                                    </div>
-                                    <div class="flex-grow-1">
-                                        <h6 class="mb-1"><?php _e('My Favorite Properties', 'property-manager-pro'); ?></h6>
-                                        <small class="text-muted"><?php _e('View and manage your saved properties', 'property-manager-pro'); ?></small>
-                                    </div>
-                                    <i class="fas fa-chevron-right text-muted"></i>
-                                </a>
-                                
-                                <a href="<?php echo get_permalink(get_option('property_manager_pages')['saved_searches']); ?>" 
-                                   class="list-group-item list-group-item-action d-flex align-items-center py-3">
-                                    <div class="feature-icon bg-success bg-opacity-10 text-success rounded me-3 d-flex align-items-center justify-content-center" style="width: 40px; height: 40px;">
-                                        <i class="fas fa-search"></i>
-                                    </div>
-                                    <div class="flex-grow-1">
-                                        <h6 class="mb-1"><?php _e('Saved Searches', 'property-manager-pro'); ?></h6>
-                                        <small class="text-muted"><?php _e('Access your saved search criteria', 'property-manager-pro'); ?></small>
-                                    </div>
-                                    <i class="fas fa-chevron-right text-muted"></i>
-                                </a>
-                                
-                                <a href="<?php echo get_permalink(get_option('property_manager_pages')['property_alerts']); ?>" 
-                                   class="list-group-item list-group-item-action d-flex align-items-center py-3">
-                                    <div class="feature-icon bg-warning bg-opacity-10 text-warning rounded me-3 d-flex align-items-center justify-content-center" style="width: 40px; height: 40px;">
-                                        <i class="fas fa-bell"></i>
-                                    </div>
-                                    <div class="flex-grow-1">
-                                        <h6 class="mb-1"><?php _e('Property Alerts', 'property-manager-pro'); ?></h6>
-                                        <small class="text-muted"><?php _e('Manage your email alert subscriptions', 'property-manager-pro'); ?></small>
-                                    </div>
-                                    <i class="fas fa-chevron-right text-muted"></i>
-                                </a>
-                                
-                                <a href="<?php echo get_permalink(get_option('property_manager_pages')['last_viewed']); ?>" 
-                                   class="list-group-item list-group-item-action d-flex align-items-center py-3">
-                                    <div class="feature-icon bg-info bg-opacity-10 text-info rounded me-3 d-flex align-items-center justify-content-center" style="width: 40px; height: 40px;">
-                                        <i class="fas fa-eye"></i>
-                                    </div>
-                                    <div class="flex-grow-1">
-                                        <h6 class="mb-1"><?php _e('Recently Viewed', 'property-manager-pro'); ?></h6>
-                                        <small class="text-muted"><?php _e('Properties you have recently viewed', 'property-manager-pro'); ?></small>
-                                    </div>
-                                    <i class="fas fa-chevron-right text-muted"></i>
-                                </a>
-                                
-                                <div class="list-group-item py-3 border-top">
-                                    <div class="d-flex gap-2">
-                                        <a href="<?php echo wp_logout_url(); ?>" class="btn btn-outline-secondary">
-                                            <i class="fas fa-sign-out-alt me-1"></i>
-                                            <?php _e('Logout', 'property-manager-pro'); ?>
-                                        </a>
-                                        <a href="<?php echo get_edit_user_link(); ?>" class="btn btn-outline-primary">
-                                            <i class="fas fa-user-edit me-1"></i>
-                                            <?php _e('Edit Profile', 'property-manager-pro'); ?>
-                                        </a>
-                                    </div>
-                                </div>
-                            </div>
-                        </div>
-                    </div>
-                </div>
-            </div>
-        </div>
-        <?php
-    }
-    
-    /**
-     * Render property card
-     */
-    private function render_property_card($property) {
-        $options = get_option('property_manager_options');
-        $currency = $options['currency_symbol'] ?? '€';        
-        ?>
-        <div class="property-card card h-100">
-            <div class="property-image-container position-relative">
-                <?php if (!empty($property->images)): 
-                    $images = $property->images;
-                    $first_image = !empty($images) ? (array)$images[0] : null;
-                ?>
-                    <img src="<?php echo esc_url($first_image['image_url']); ?>" 
-                         alt="<?php echo esc_attr($property->title); ?>" 
-                         class="card-img-top property-image">
-                <?php else: ?>
-                    <div class="no-image-placeholder card-img-top d-flex align-items-center justify-content-center bg-light">
-                        <i class="fas fa-home fa-3x text-muted"></i>
                     </div>
                 <?php endif; ?>
                 
-                <div class="property-badges position-absolute top-0 start-0 m-2">
-                    <?php if ($property->featured): ?>
-                        <span class="badge bg-warning"><?php _e('Featured', 'property-manager-pro'); ?></span>
-                    <?php endif; ?>
-                    <?php if ($property->new_build): ?>
-                        <span class="badge bg-success"><?php _e('New Build', 'property-manager-pro'); ?></span>
-                    <?php endif; ?>
-                </div>
-                
-                <button class="btn btn-outline-light favorite-btn position-absolute top-0 end-0 m-2" 
-                        data-property-id="<?php echo $property->id; ?>">
-                    <i class="fas fa-heart"></i>
-                </button>
-            </div>
-            
-            <div class="card-body">
-                <div class="property-price mb-2">
-                    <h5 class="text-primary mb-0">
-                        <?php echo $currency . number_format($property->price); ?>
-                        <?php if ($property->price_freq == 'rent'): ?>
-                            <small class="text-muted">/<?php _e('month', 'property-manager-pro'); ?></small>
-                        <?php endif; ?>
-                    </h5>
-                </div>
-                
-                <h6 class="property-title">
-                    <a href="<?php echo $this->get_property_url($property); ?>" class="text-decoration-none">
-                        <?php echo esc_html($property->title); ?>
-                    </a>
-                </h6>
-                
-                <p class="property-location text-muted mb-2">
-                    <i class="fas fa-map-marker-alt me-1"></i>
-                    <?php echo esc_html($property->town . ', ' . $property->province); ?>
-                </p>
-                
-                <div class="property-features mb-3">
-                    <?php if ($property->beds): ?>
-                        <span class="feature-item me-3">
-                            <i class="fas fa-bed me-1"></i>
-                            <?php echo $property->beds; ?> <?php _e('Beds', 'property-manager-pro'); ?>
-                        </span>
-                    <?php endif; ?>
-                    
-                    <?php if ($property->baths): ?>
-                        <span class="feature-item me-3">
-                            <i class="fas fa-bath me-1"></i>
-                            <?php echo $property->baths; ?> <?php _e('Baths', 'property-manager-pro'); ?>
-                        </span>
-                    <?php endif; ?>
-                    
-                    <?php if ($property->surface_area_built): ?>
-                        <span class="feature-item">
-                            <i class="fas fa-expand-arrows-alt me-1"></i>
-                            <?php echo $property->surface_area_built; ?>m²
-                        </span>
-                    <?php endif; ?>
-                </div>
-            </div>
-            
-            <div class="card-footer bg-transparent">
-                <div class="d-grid">
-                    <a href="<?php echo $this->get_property_url($property); ?>" 
-                       class="btn btn-primary">
-                        <?php _e('View Details', 'property-manager-pro'); ?>
-                    </a>
-                </div>
-            </div>
-        </div>
-        <?php
-    }
-    
-    /**
-     * Render login required message
-     */
-    private function render_login_required_message() {
-        ob_start();
-        ?>
-        <div class="container">
-            <div class="row justify-content-center">
-                <div class="col-md-8 col-lg-6">
-                    <div class="card border-0 shadow-sm">
-                        <div class="card-body text-center py-5">
-                            <div class="mb-4">
-                                <i class="fas fa-lock fa-4x text-primary opacity-50"></i>
-                            </div>
-                            <h3 class="card-title text-primary mb-3">
-                                <?php _e('Login Required', 'property-manager-pro'); ?>
-                            </h3>
-                            <p class="card-text text-muted mb-4">
-                                <?php _e('Please log in to your account to access this feature. If you don\'t have an account, you can create one for free.', 'property-manager-pro'); ?>
-                            </p>
-                            <div class="d-grid gap-2 d-md-flex justify-content-md-center">
-                                <a href="<?php echo wp_login_url(get_permalink()); ?>" 
-                                   class="btn btn-primary btn-lg">
-                                    <i class="fas fa-sign-in-alt me-2"></i>
-                                    <?php _e('Login to Your Account', 'property-manager-pro'); ?>
-                                </a>
-                                <?php if (get_option('users_can_register')): ?>
-                                    <a href="<?php echo wp_registration_url(); ?>" 
-                                       class="btn btn-outline-secondary btn-lg">
-                                        <i class="fas fa-user-plus me-2"></i>
-                                        <?php _e('Create Account', 'property-manager-pro'); ?>
-                                    </a>
-                                <?php endif; ?>
-                            </div>
-                            
-                            <hr class="my-4">
-                            
-                            <div class="row text-center">
-                                <div class="col-md-4 mb-3">
-                                    <i class="fas fa-heart text-danger mb-2 d-block"></i>
-                                    <small class="text-muted"><?php _e('Save Favorites', 'property-manager-pro'); ?></small>
-                                </div>
-                                <div class="col-md-4 mb-3">
-                                    <i class="fas fa-search text-success mb-2 d-block"></i>
-                                    <small class="text-muted"><?php _e('Save Searches', 'property-manager-pro'); ?></small>
-                                </div>
-                                <div class="col-md-4 mb-3">
-                                    <i class="fas fa-bell text-warning mb-2 d-block"></i>
-                                    <small class="text-muted"><?php _e('Get Alerts', 'property-manager-pro'); ?></small>
-                                </div>
-                            </div>
-                        </div>
+                <?php if ($atts['show_pagination'] === 'yes' && $results['total'] > $per_page): ?>
+                    <div class="search-pagination mt-4">
+                        <?php
+                        echo paginate_links(array(
+                            'base' => add_query_arg('paged', '%#%'),
+                            'format' => '',
+                            'current' => $search_params['page'],
+                            'total' => ceil($results['total'] / $per_page),
+                            'prev_text' => '&laquo;',
+                            'next_text' => '&raquo;',
+                            'type' => 'list'
+                        ));
+                        ?>
                     </div>
-                </div>
-            </div>
+                <?php endif; ?>
+                
+            <?php endif; ?>
         </div>
         <?php
+        
         return ob_get_clean();
     }
     
     /**
-     * Get property URL
+     * Render Property Grid
      */
-    private function get_property_url($property) {
-        // You can customize this based on your URL structure
-        return add_query_arg('property_id', $property->id, get_permalink());
+    public function render_property_grid($atts) {
+        $atts = shortcode_atts(array(
+            'posts_per_page' => 12,
+            'orderby' => 'created_at',
+            'order' => 'DESC',
+            'property_type' => '',
+            'town' => '',
+            'featured' => 'no',
+            'class' => ''
+        ), $atts, 'property_grid');
+        
+        $args = array(
+            'per_page' => absint($atts['posts_per_page']),
+            'orderby' => sanitize_text_field($atts['orderby']),
+            'order' => strtoupper(sanitize_text_field($atts['order'])),
+            'page' => 1
+        );
+        
+        if (!empty($atts['property_type'])) {
+            $args['property_type'] = sanitize_text_field($atts['property_type']);
+        }
+        
+        if (!empty($atts['town'])) {
+            $args['town'] = sanitize_text_field($atts['town']);
+        }
+        
+        if ($atts['featured'] === 'yes') {
+            $args['featured'] = 1;
+        }
+        
+        ob_start();
+        
+        $property_search = PropertyManager_Search::get_instance();
+        $results = $property_search->search_properties($args);
+        
+        if (!empty($results['properties'])):
+        ?>
+            <div class="row row-cols-1 row-cols-md-2 row-cols-lg-3 g-4 property-grid <?php echo esc_attr($atts['class']); ?>">
+                <?php foreach ($results['properties'] as $property): ?>
+                    <div class="col">
+                        <?php $this->render_property_card($property); ?>
+                    </div>
+                <?php endforeach; ?>
+            </div>
+        <?php
+        else:
+            echo '<p class="alert alert-info">' . esc_html__('No properties found.', 'property-manager-pro') . '</p>';
+        endif;
+        
+        return ob_get_clean();
     }
     
     /**
-     * Get user saved searches count
+     * Render Featured Properties
      */
-    private function get_user_saved_searches_count($user_id) {
-        global $wpdb;
-        $table = PropertyManager_Database::get_table_name('saved_searches');
+    public function render_featured_properties($atts) {
+        $atts = shortcode_atts(array(
+            'limit' => 6,
+            'class' => ''
+        ), $atts, 'property_featured');
         
-        return $wpdb->get_var($wpdb->prepare(
-            "SELECT COUNT(*) FROM $table WHERE user_id = %d AND status = 'active'",
-            $user_id
+        return $this->render_property_grid(array(
+            'posts_per_page' => absint($atts['limit']),
+            'featured' => 'yes',
+            'class' => $atts['class']
         ));
     }
-
-    private function render_saved_searches($atts) {
-        global $wpdb;
+    
+    /**
+     * Render Single Property
+     */
+    public function render_single_property($atts) {
+        $atts = shortcode_atts(array(
+            'id' => 0,
+            'class' => ''
+        ), $atts, 'property_single');
+        
+        $property_id = absint($atts['id']);
+        
+        if (!$property_id) {
+            return '<p class="alert alert-warning">' . esc_html__('Property ID required.', 'property-manager-pro') . '</p>';
+        }
+        
+        ob_start();
+        
+        $property_manager = PropertyManager_Property::get_instance();
+        $property = $property_manager->get_property($property_id);
+        
+        if (!$property) {
+            return '<p class="alert alert-danger">' . esc_html__('Property not found.', 'property-manager-pro') . '</p>';
+        }
+        
+        $template_path = PROPERTY_MANAGER_PLUGIN_PATH . 'public/templates/content-single-property.php';
+        if (file_exists($template_path)) {
+            include $template_path;
+        } else {
+            echo '<div class="alert alert-warning">' . esc_html__('Template not found.', 'property-manager-pro') . '</div>';
+        }
+        
+        return ob_get_clean();
+    }
+    
+    /**
+     * Render User Dashboard
+     */
+    public function render_user_dashboard($atts) {
+        if (!is_user_logged_in()) {
+            return $this->render_login_required_message();
+        }
+        
+        $atts = shortcode_atts(array(
+            'class' => ''
+        ), $atts, 'property_user_dashboard');
+        
+        ob_start();
+        
         $user_id = get_current_user_id();
+        $user = get_userdata($user_id);
+        
+        $favorites_manager = PropertyManager_Favorites::get_instance();
+        $alerts_manager = PropertyManager_Alerts::get_instance();
+        $property_manager = PropertyManager_Property::get_instance();
+        
+        $favorites_count = $favorites_manager->get_user_favorites_count($user_id);
+        $alerts = $alerts_manager->get_user_alerts($user_id);
+        $last_viewed = $property_manager->get_last_viewed_properties(5);
+        
+        ?>
+        <div class="property-user-dashboard <?php echo esc_attr($atts['class']); ?>">
+            <div class="dashboard-header mb-4">
+                <h2><?php printf(esc_html__('Welcome back, %s', 'property-manager-pro'), esc_html($user->display_name)); ?></h2>
+            </div>
+            
+            <div class="row g-4 mb-4">
+                <div class="col-md-4">
+                    <div class="card text-center">
+                        <div class="card-body">
+                            <i class="fas fa-heart fa-3x text-danger mb-3"></i>
+                            <h3><?php echo number_format_i18n($favorites_count); ?></h3>
+                            <p class="text-muted"><?php esc_html_e('Favorites', 'property-manager-pro'); ?></p>
+                        </div>
+                    </div>
+                </div>
+                
+                <div class="col-md-4">
+                    <div class="card text-center">
+                        <div class="card-body">
+                            <i class="fas fa-bell fa-3x text-warning mb-3"></i>
+                            <h3><?php echo number_format_i18n(count($alerts)); ?></h3>
+                            <p class="text-muted"><?php esc_html_e('Active Alerts', 'property-manager-pro'); ?></p>
+                        </div>
+                    </div>
+                </div>
+                
+                <div class="col-md-4">
+                    <div class="card text-center">
+                        <div class="card-body">
+                            <i class="fas fa-eye fa-3x text-info mb-3"></i>
+                            <h3><?php echo number_format_i18n($last_viewed['total']); ?></h3>
+                            <p class="text-muted"><?php esc_html_e('Viewed', 'property-manager-pro'); ?></p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        <?php
+        
+        return ob_get_clean();
+    }
+    
+    /**
+     * Render User Favorites
+     */
+    public function render_user_favorites($atts) {
+        if (!is_user_logged_in()) {
+            return $this->render_login_required_message();
+        }
+        
+        $atts = shortcode_atts(array(
+            'per_page' => 12,
+            'class' => ''
+        ), $atts, 'property_user_favorites');
+        
+        ob_start();
+        
+        $favorites_manager = PropertyManager_Favorites::get_instance();
+        $page = isset($_GET['paged']) ? max(1, absint($_GET['paged'])) : 1;
+        
+        $favorites = $favorites_manager->get_user_favorites(null, array(
+            'page' => $page,
+            'per_page' => absint($atts['per_page'])
+        ));
+        
+        ?>
+        <div class="property-user-favorites <?php echo esc_attr($atts['class']); ?>">
+            <h2 class="mb-4"><?php esc_html_e('My Favorites', 'property-manager-pro'); ?></h2>
+            
+            <?php if (empty($favorites['properties'])): ?>
+                <div class="alert alert-info text-center py-5">
+                    <i class="fas fa-heart fa-4x text-muted mb-3"></i>
+                    <h4><?php esc_html_e('No Favorites Yet', 'property-manager-pro'); ?></h4>
+                    <p><?php esc_html_e('Start adding properties to see them here.', 'property-manager-pro'); ?></p>
+                </div>
+            <?php else: ?>
+                <div class="row row-cols-1 row-cols-md-2 row-cols-lg-3 g-4">
+                    <?php foreach ($favorites['properties'] as $property): ?>
+                        <div class="col">
+                            <?php $this->render_property_card($property, 'default', true); ?>
+                        </div>
+                    <?php endforeach; ?>
+                </div>
+                
+                <?php if ($favorites['total'] > $atts['per_page']): ?>
+                    <div class="mt-4">
+                        <?php
+                        echo paginate_links(array(
+                            'base' => add_query_arg('paged', '%#%'),
+                            'current' => $page,
+                            'total' => ceil($favorites['total'] / $atts['per_page'])
+                        ));
+                        ?>
+                    </div>
+                <?php endif; ?>
+            <?php endif; ?>
+        </div>
+        <?php
+        
+        return ob_get_clean();
+    }
+    
+    /**
+     * Render Saved Searches
+     */
+    public function render_saved_searches($atts) {
+        if (!is_user_logged_in()) {
+            return $this->render_login_required_message();
+        }
+        
+        ob_start();
+        
+        global $wpdb;
         $table = PropertyManager_Database::get_table_name('saved_searches');
+        $user_id = get_current_user_id();
         
         $saved_searches = $wpdb->get_results($wpdb->prepare(
             "SELECT * FROM $table WHERE user_id = %d ORDER BY created_at DESC",
@@ -741,153 +525,516 @@ class PropertyManager_Shortcodes {
         ));
         
         ?>
-        <div class="container-fluid">
-            <div class="d-flex justify-content-between align-items-center mb-4">
-                <h2 class="h3 mb-0">
-                    <i class="fas fa-search me-2 text-primary"></i>
-                    <?php _e('My Saved Searches', 'property-manager-pro'); ?>
-                </h2>
-                <button class="btn btn-primary" data-bs-toggle="modal" data-bs-target="#saveSearchModal">
-                    <i class="fas fa-plus me-1"></i>
-                    <?php _e('Save Current Search', 'property-manager-pro'); ?>
-                </button>
-            </div>
-
-            <?php if ($saved_searches): ?>
-                <div class="row g-4">
-                    <?php foreach ($saved_searches as $search): ?>
-                        <div class="col-md-6 col-lg-4">
-                            <div class="card border-0 shadow-sm h-100">
-                                <div class="card-header bg-light border-0 d-flex justify-content-between align-items-center">
-                                    <h6 class="mb-0 fw-bold"><?php echo esc_html($search->search_name); ?></h6>
-                                    <div class="dropdown">
-                                        <button class="btn btn-sm btn-outline-secondary dropdown-toggle" 
-                                                data-bs-toggle="dropdown">
-                                            <i class="fas fa-ellipsis-h"></i>
-                                        </button>
-                                        <ul class="dropdown-menu">
-                                            <li>
-                                                <button class="dropdown-item load-search-btn" 
-                                                        data-search-id="<?php echo $search->id; ?>">
-                                                    <i class="fas fa-search me-2"></i>
-                                                    <?php _e('Run Search', 'property-manager-pro'); ?>
-                                                </button>
-                                            </li>
-                                            <li>
-                                                <button class="dropdown-item edit-search-btn" 
-                                                        data-search-id="<?php echo $search->id; ?>">
-                                                    <i class="fas fa-edit me-2"></i>
-                                                    <?php _e('Edit', 'property-manager-pro'); ?>
-                                                </button>
-                                            </li>
-                                            <li><hr class="dropdown-divider"></li>
-                                            <li>
-                                                <button class="dropdown-item text-danger delete-search-btn" 
-                                                        data-search-id="<?php echo $search->id; ?>">
-                                                    <i class="fas fa-trash me-2"></i>
-                                                    <?php _e('Delete', 'property-manager-pro'); ?>
-                                                </button>
-                                            </li>
-                                        </ul>
-                                    </div>
-                                </div>
-                                
-                                <div class="card-body">
-                                    <?php
-                                    $criteria = json_decode($search->search_criteria, true);
-                                    ?>
-                                    <div class="search-criteria small text-muted mb-3">
-                                        <?php if (!empty($criteria['location'])): ?>
-                                            <div class="mb-1">
-                                                <i class="fas fa-map-marker-alt me-1"></i>
-                                                <strong><?php _e('Location:', 'property-manager-pro'); ?></strong> 
-                                                <?php echo esc_html($criteria['location']); ?>
-                                            </div>
-                                        <?php endif; ?>
-                                        
-                                        <?php if (!empty($criteria['type'])): ?>
-                                            <div class="mb-1">
-                                                <i class="fas fa-home me-1"></i>
-                                                <strong><?php _e('Type:', 'property-manager-pro'); ?></strong> 
-                                                <?php echo esc_html($criteria['type']); ?>
-                                            </div>
-                                        <?php endif; ?>
-                                        
-                                        <?php if (!empty($criteria['min_price']) || !empty($criteria['max_price'])): ?>
-                                            <div class="mb-1">
-                                                <i class="fas fa-euro-sign me-1"></i>
-                                                <strong><?php _e('Price:', 'property-manager-pro'); ?></strong>
-                                                <?php 
-                                                $price_range = array();
-                                                if (!empty($criteria['min_price'])) {
-                                                    $price_range[] = '€' . number_format($criteria['min_price']) . '+';
-                                                }
-                                                if (!empty($criteria['max_price'])) {
-                                                    $price_range[] = '€' . number_format($criteria['max_price']) . ' max';
-                                                }
-                                                echo implode(' - ', $price_range);
-                                                ?>
-                                            </div>
-                                        <?php endif; ?>
-                                        
-                                        <?php if (!empty($criteria['beds'])): ?>
-                                            <div class="mb-1">
-                                                <i class="fas fa-bed me-1"></i>
-                                                <strong><?php _e('Bedrooms:', 'property-manager-pro'); ?></strong> 
-                                                <?php echo $criteria['beds']; ?>+
-                                            </div>
-                                        <?php endif; ?>
-                                    </div>
-                                    
-                                    <?php if ($atts['show_alerts'] && $search->email_alerts): ?>
-                                        <div class="alert alert-success alert-sm py-2 mb-2">
-                                            <i class="fas fa-bell me-1"></i>
-                                            <small>
-                                                <?php printf(__('Email alerts: %s', 'property-manager-pro'), 
-                                                      ucfirst($search->alert_frequency)); ?>
-                                            </small>
-                                        </div>
-                                    <?php endif; ?>
-                                    
-                                    <div class="text-muted small">
-                                        <i class="fas fa-calendar me-1"></i>
-                                        <?php printf(__('Created %s ago', 'property-manager-pro'), 
-                                              human_time_diff(strtotime($search->created_at))); ?>
-                                    </div>
-                                </div>
-                                
-                                <div class="card-footer bg-transparent border-0">
-                                    <div class="d-grid">
-                                        <button class="btn btn-primary btn-sm load-search-btn" 
-                                                data-search-id="<?php echo $search->id; ?>">
-                                            <i class="fas fa-search me-1"></i>
-                                            <?php _e('Run This Search', 'property-manager-pro'); ?>
-                                        </button>
-                                    </div>
-                                </div>
-                            </div>
-                        </div>
-                    <?php endforeach; ?>
+        <div class="property-saved-searches">
+            <h2 class="mb-4"><?php esc_html_e('Saved Searches', 'property-manager-pro'); ?></h2>
+            
+            <?php if (empty($saved_searches)): ?>
+                <div class="alert alert-info">
+                    <p><?php esc_html_e('No saved searches yet.', 'property-manager-pro'); ?></p>
                 </div>
             <?php else: ?>
-                <div class="text-center py-5">
-                    <div class="card border-0 shadow-sm">
-                        <div class="card-body py-5">
-                            <i class="fas fa-search fa-4x text-muted mb-3"></i>
-                            <h4 class="text-muted"><?php _e('No Saved Searches', 'property-manager-pro'); ?></h4>
-                            <p class="text-muted mb-4">
-                                <?php _e('You haven\'t saved any searches yet. Search for properties and save your criteria for quick access later.', 'property-manager-pro'); ?>
-                            </p>
-                            <a href="<?php echo get_permalink(get_option('property_manager_pages')['property_search']); ?>" 
-                               class="btn btn-primary">
-                                <i class="fas fa-search me-1"></i>
-                                <?php _e('Search Properties', 'property-manager-pro'); ?>
-                            </a>
+                <div class="list-group">
+                    <?php foreach ($saved_searches as $search): ?>
+                        <?php $criteria = maybe_unserialize($search->search_criteria); ?>
+                        <div class="list-group-item">
+                            <h5><?php echo esc_html($search->search_name); ?></h5>
+                            <small class="text-muted">
+                                <?php echo esc_html(human_time_diff(strtotime($search->created_at))) . ' ' . esc_html__('ago', 'property-manager-pro'); ?>
+                            </small>
                         </div>
-                    </div>
+                    <?php endforeach; ?>
                 </div>
             <?php endif; ?>
         </div>
         <?php
+        
+        return ob_get_clean();
+    }
+    
+    /**
+     * Render Alerts Management
+     */
+    public function render_alerts_management($atts) {
+        if (!is_user_logged_in()) {
+            return $this->render_login_required_message();
+        }
+        
+        ob_start();
+        
+        $alerts_manager = PropertyManager_Alerts::get_instance();
+        $alerts = $alerts_manager->get_user_alerts(get_current_user_id());
+        
+        ?>
+        <div class="property-alerts-management">
+            <h2 class="mb-4"><?php esc_html_e('Property Alerts', 'property-manager-pro'); ?></h2>
+            
+            <?php if (empty($alerts)): ?>
+                <div class="alert alert-info">
+                    <p><?php esc_html_e('No alerts created yet.', 'property-manager-pro'); ?></p>
+                </div>
+            <?php else: ?>
+                <div class="alerts-list">
+                    <?php foreach ($alerts as $alert): ?>
+                        <div class="card mb-3">
+                            <div class="card-body">
+                                <h5><?php echo esc_html($alert->alert_name); ?></h5>
+                                <p class="mb-0">
+                                    <span class="badge <?php echo $alert->status === 'active' ? 'bg-success' : 'bg-secondary'; ?>">
+                                        <?php echo esc_html(ucfirst($alert->status)); ?>
+                                    </span>
+                                    <small class="text-muted ms-2">
+                                        <?php printf(esc_html__('Frequency: %s', 'property-manager-pro'), esc_html(ucfirst($alert->frequency))); ?>
+                                    </small>
+                                </p>
+                            </div>
+                        </div>
+                    <?php endforeach; ?>
+                </div>
+            <?php endif; ?>
+        </div>
+        <?php
+        
+        return ob_get_clean();
+    }
+    
+    /**
+     * Render Last Viewed
+     */
+    public function render_last_viewed($atts) {
+        $atts = shortcode_atts(array(
+            'limit' => 10,
+            'class' => ''
+        ), $atts, 'property_last_viewed');
+        
+        ob_start();
+        
+        $property_manager = PropertyManager_Property::get_instance();
+        $last_viewed = $property_manager->get_last_viewed_properties(absint($atts['limit']));
+        
+        ?>
+        <div class="property-last-viewed <?php echo esc_attr($atts['class']); ?>">
+            <h2 class="mb-4"><?php esc_html_e('Recently Viewed', 'property-manager-pro'); ?></h2>
+            
+            <?php if (empty($last_viewed['properties'])): ?>
+                <div class="alert alert-info">
+                    <p><?php esc_html_e('No recently viewed properties.', 'property-manager-pro'); ?></p>
+                </div>
+            <?php else: ?>
+                <div class="row row-cols-1 row-cols-md-2 row-cols-lg-3 g-4">
+                    <?php foreach ($last_viewed['properties'] as $property): ?>
+                        <div class="col">
+                            <?php $this->render_property_card($property); ?>
+                        </div>
+                    <?php endforeach; ?>
+                </div>
+            <?php endif; ?>
+        </div>
+        <?php
+        
+        return ob_get_clean();
+    }
+    
+    /**
+     * Render Login Form
+     */
+    public function render_login_form($atts) {
+        if (is_user_logged_in()) {
+            return '<p class="alert alert-info">' . esc_html__('You are already logged in.', 'property-manager-pro') . '</p>';
+        }
+        
+        $atts = shortcode_atts(array(
+            'redirect' => '',
+            'class' => ''
+        ), $atts, 'property_login_form');
+        
+        $redirect = !empty($atts['redirect']) ? esc_url($atts['redirect']) : home_url();
+        
+        ob_start();
+        
+        wp_login_form(array(
+            'redirect' => $redirect,
+            'label_username' => __('Username', 'property-manager-pro'),
+            'label_password' => __('Password', 'property-manager-pro'),
+            'label_log_in' => __('Login', 'property-manager-pro')
+        ));
+        
+        return ob_get_clean();
+    }
+    
+    /**
+     * Render Register Form
+     */
+    public function render_register_form($atts) {
+        if (is_user_logged_in()) {
+            return '<p class="alert alert-info">' . esc_html__('You are already registered.', 'property-manager-pro') . '</p>';
+        }
+        
+        ob_start();
+        ?>
+        <div class="property-register-form">
+            <h3><?php esc_html_e('Create Account', 'property-manager-pro'); ?></h3>
+            <form method="post">
+                <div class="mb-3">
+                    <label class="form-label"><?php esc_html_e('Username', 'property-manager-pro'); ?></label>
+                    <input type="text" name="user_login" class="form-control" required>
+                </div>
+                <div class="mb-3">
+                    <label class="form-label"><?php esc_html_e('Email', 'property-manager-pro'); ?></label>
+                    <input type="email" name="user_email" class="form-control" required>
+                </div>
+                <button type="submit" class="btn btn-primary"><?php esc_html_e('Register', 'property-manager-pro'); ?></button>
+            </form>
+        </div>
+        <?php
+        return ob_get_clean();
+    }
+    
+    /**
+     * Render Reset Password Form
+     */
+    public function render_reset_password_form($atts) {
+        ob_start();
+        ?>
+        <div class="property-reset-password">
+            <h3><?php esc_html_e('Reset Password', 'property-manager-pro'); ?></h3>
+            <form method="post" action="<?php echo esc_url(wp_lostpassword_url()); ?>">
+                <div class="mb-3">
+                    <label class="form-label"><?php esc_html_e('Email Address', 'property-manager-pro'); ?></label>
+                    <input type="email" name="user_login" class="form-control" required>
+                </div>
+                <button type="submit" class="btn btn-primary"><?php esc_html_e('Reset Password', 'property-manager-pro'); ?></button>
+            </form>
+        </div>
+        <?php
+        return ob_get_clean();
+    }
+    
+    /**
+     * Render Contact Form
+     */
+    public function render_contact_form($atts) {
+        $atts = shortcode_atts(array(
+            'property_id' => 0,
+            'class' => ''
+        ), $atts, 'property_contact_form');
+        
+        $property_id = absint($atts['property_id']);
+        
+        ob_start();
+        ?>
+        <div class="property-contact-form <?php echo esc_attr($atts['class']); ?>">
+            <h4><?php esc_html_e('Contact About This Property', 'property-manager-pro'); ?></h4>
+            
+            <form id="property-inquiry-form" method="post">
+                <div class="mb-3">
+                    <label for="inquiry_name" class="form-label"><?php esc_html_e('Name', 'property-manager-pro'); ?></label>
+                    <input type="text" name="name" id="inquiry_name" class="form-control" required 
+                           value="<?php echo is_user_logged_in() ? esc_attr(wp_get_current_user()->display_name) : ''; ?>">
+                </div>
+                
+                <div class="mb-3">
+                    <label for="inquiry_email" class="form-label"><?php esc_html_e('Email', 'property-manager-pro'); ?></label>
+                    <input type="email" name="email" id="inquiry_email" class="form-control" required
+                           value="<?php echo is_user_logged_in() ? esc_attr(wp_get_current_user()->user_email) : ''; ?>">
+                </div>
+                
+                <div class="mb-3">
+                    <label for="inquiry_phone" class="form-label"><?php esc_html_e('Phone', 'property-manager-pro'); ?></label>
+                    <input type="tel" name="phone" id="inquiry_phone" class="form-control">
+                </div>
+                
+                <div class="mb-3">
+                    <label for="inquiry_message" class="form-label"><?php esc_html_e('Message', 'property-manager-pro'); ?></label>
+                    <textarea name="message" id="inquiry_message" class="form-control" rows="5" required></textarea>
+                </div>
+                
+                <?php wp_nonce_field('property_inquiry', 'inquiry_nonce'); ?>
+                <input type="hidden" name="property_id" value="<?php echo esc_attr($property_id); ?>">
+                <input type="hidden" name="property_inquiry_submit" value="1">
+                
+                <button type="submit" class="btn btn-primary">
+                    <?php esc_html_e('Send Inquiry', 'property-manager-pro'); ?>
+                </button>
+            </form>
+        </div>
+        <?php
+        return ob_get_clean();
+    }
+    
+    /**
+     * Render Alert Signup Form
+     */
+    public function render_alert_signup_form($atts) {
+        $atts = shortcode_atts(array(
+            'class' => '',
+            'show_search_form' => 'yes'
+        ), $atts, 'property_alert_signup');
+        
+        ob_start();
+        
+        $current_search = $this->get_sanitized_search_params();
+        
+        ?>
+        <div class="property-alert-signup-form <?php echo esc_attr($atts['class']); ?>">
+            <form id="property-alert-form" method="post">
+                <div class="mb-3">
+                    <label for="alert_name" class="form-label"><?php esc_html_e('Alert Name', 'property-manager-pro'); ?></label>
+                    <input type="text" name="alert_name" id="alert_name" class="form-control" required>
+                </div>
+                
+                <?php if (!is_user_logged_in()): ?>
+                    <div class="mb-3">
+                        <label for="alert_email" class="form-label"><?php esc_html_e('Email', 'property-manager-pro'); ?></label>
+                        <input type="email" name="alert_email" id="alert_email" class="form-control" required>
+                    </div>
+                <?php endif; ?>
+                
+                <div class="mb-3">
+                    <label for="alert_frequency" class="form-label"><?php esc_html_e('Frequency', 'property-manager-pro'); ?></label>
+                    <select name="frequency" id="alert_frequency" class="form-select" required>
+                        <option value="daily"><?php esc_html_e('Daily', 'property-manager-pro'); ?></option>
+                        <option value="weekly" selected><?php esc_html_e('Weekly', 'property-manager-pro'); ?></option>
+                        <option value="monthly"><?php esc_html_e('Monthly', 'property-manager-pro'); ?></option>
+                    </select>
+                </div>
+                
+                <?php if ($atts['show_search_form'] === 'yes'): ?>
+                    <div class="row g-3">
+                        <div class="col-md-6">
+                            <label for="alert_location" class="form-label"><?php esc_html_e('Location', 'property-manager-pro'); ?></label>
+                            <input type="text" name="location" id="alert_location" class="form-control" 
+                                   value="<?php echo esc_attr($current_search['location'] ?? ''); ?>">
+                        </div>
+                        
+                        <div class="col-md-6">
+                            <label for="alert_property_type" class="form-label"><?php esc_html_e('Type', 'property-manager-pro'); ?></label>
+                            <select name="property_type" id="alert_property_type" class="form-select">
+                                <option value=""><?php esc_html_e('Any', 'property-manager-pro'); ?></option>
+                                <option value="Apartment"><?php esc_html_e('Apartment', 'property-manager-pro'); ?></option>
+                                <option value="Villa"><?php esc_html_e('Villa', 'property-manager-pro'); ?></option>
+                            </select>
+                        </div>
+                        
+                        <div class="col-md-6">
+                            <label for="alert_price_min" class="form-label"><?php esc_html_e('Min Price', 'property-manager-pro'); ?></label>
+                            <input type="number" name="price_min" id="alert_price_min" class="form-control">
+                        </div>
+                        
+                        <div class="col-md-6">
+                            <label for="alert_price_max" class="form-label"><?php esc_html_e('Max Price', 'property-manager-pro'); ?></label>
+                            <input type="number" name="price_max" id="alert_price_max" class="form-control">
+                        </div>
+                    </div>
+                <?php endif; ?>
+                
+                <?php wp_nonce_field('property_alert_signup', 'alert_nonce'); ?>
+                <input type="hidden" name="property_alert_submit" value="1">
+                
+                <button type="submit" class="btn btn-primary mt-3">
+                    <?php esc_html_e('Create Alert', 'property-manager-pro'); ?>
+                </button>
+            </form>
+        </div>
+        <?php
+        return ob_get_clean();
+    }
+    
+    /**
+     * Helper: Render property card
+     */
+    private function render_property_card($property, $style = 'default', $show_remove = false) {
+        $safe_property = (object) array(
+            'id' => absint($property->id ?? 0),
+            'title' => esc_html($property->title ?? ''),
+            'ref' => esc_html($property->ref ?? ''),
+            'price' => floatval($property->price ?? 0),
+            'currency' => esc_html($property->currency ?? 'EUR'),
+            'beds' => absint($property->beds ?? 0),
+            'baths' => absint($property->baths ?? 0),
+            'town' => esc_html($property->town ?? ''),
+            'province' => esc_html($property->province ?? ''),
+            'surface_area_built' => floatval($property->surface_area_built ?? 0),
+            'pool' => absint($property->pool ?? 0),
+            'new_build' => absint($property->new_build ?? 0),
+            'property_type' => esc_html($property->property_type ?? ''),
+            'featured_image' => esc_url($property->featured_image ?? ''),
+            'url' => esc_url(home_url('/property/' . absint($property->id ?? 0)))
+        );
+        
+        $is_favorite = false;
+        if (is_user_logged_in()) {
+            $favorites_manager = PropertyManager_Favorites::get_instance();
+            $is_favorite = $favorites_manager->is_favorite($safe_property->id);
+        }
+        
+        ?>
+        <div class="card property-card h-100">
+            <?php if ($safe_property->featured_image): ?>
+                <div class="position-relative">
+                    <a href="<?php echo $safe_property->url; ?>">
+                        <img src="<?php echo $safe_property->featured_image; ?>" 
+                             class="card-img-top" 
+                             alt="<?php echo $safe_property->title; ?>">
+                    </a>
+                    
+                    <?php if ($safe_property->new_build || $safe_property->pool): ?>
+                        <div class="position-absolute top-0 start-0 p-2">
+                            <?php if ($safe_property->new_build): ?>
+                                <span class="badge bg-success"><?php esc_html_e('New', 'property-manager-pro'); ?></span>
+                            <?php endif; ?>
+                            <?php if ($safe_property->pool): ?>
+                                <span class="badge bg-info"><?php esc_html_e('Pool', 'property-manager-pro'); ?></span>
+                            <?php endif; ?>
+                        </div>
+                    <?php endif; ?>
+                    
+                    <div class="position-absolute top-0 end-0 p-2">
+                        <button type="button" 
+                                class="btn btn-sm btn-light favorite-btn <?php echo $is_favorite ? 'active' : ''; ?>" 
+                                data-property-id="<?php echo esc_attr($safe_property->id); ?>"
+                                data-nonce="<?php echo esc_attr(wp_create_nonce('property_manager_nonce')); ?>">
+                            <i class="fas fa-heart"></i>
+                        </button>
+                    </div>
+                </div>
+            <?php endif; ?>
+            
+            <div class="card-body">
+                <h4 class="text-primary"><?php echo $safe_property->currency . ' ' . number_format($safe_property->price); ?></h4>
+                
+                <h5><a href="<?php echo $safe_property->url; ?>"><?php echo $safe_property->title; ?></a></h5>
+                
+                <p class="text-muted">
+                    <i class="fas fa-map-marker-alt"></i>
+                    <?php echo $safe_property->town . ', ' . $safe_property->province; ?>
+                </p>
+                
+                <div class="property-features">
+                    <?php if ($safe_property->beds): ?>
+                        <span><i class="fas fa-bed"></i> <?php echo $safe_property->beds; ?></span>
+                    <?php endif; ?>
+                    <?php if ($safe_property->baths): ?>
+                        <span><i class="fas fa-bath"></i> <?php echo $safe_property->baths; ?></span>
+                    <?php endif; ?>
+                    <?php if ($safe_property->surface_area_built): ?>
+                        <span><i class="fas fa-ruler"></i> <?php echo number_format($safe_property->surface_area_built); ?>m²</span>
+                    <?php endif; ?>
+                </div>
+                
+                <a href="<?php echo $safe_property->url; ?>" class="btn btn-primary mt-3">
+                    <?php esc_html_e('View Details', 'property-manager-pro'); ?>
+                </a>
+            </div>
+        </div>
+        <?php
+    }
+    
+    /**
+     * Helper: Render property list item
+     */
+    private function render_property_list_item($property) {
+        $safe_property = (object) array(
+            'id' => absint($property->id ?? 0),
+            'title' => esc_html($property->title ?? ''),
+            'price' => floatval($property->price ?? 0),
+            'currency' => esc_html($property->currency ?? 'EUR'),
+            'beds' => absint($property->beds ?? 0),
+            'baths' => absint($property->baths ?? 0),
+            'town' => esc_html($property->town ?? ''),
+            'province' => esc_html($property->province ?? ''),
+            'featured_image' => esc_url($property->featured_image ?? ''),
+            'url' => esc_url(home_url('/property/' . absint($property->id ?? 0)))
+        );
+        
+        ?>
+        <div class="card mb-3">
+            <div class="row g-0">
+                <?php if ($safe_property->featured_image): ?>
+                    <div class="col-md-4">
+                        <img src="<?php echo $safe_property->featured_image; ?>" class="img-fluid" alt="<?php echo $safe_property->title; ?>">
+                    </div>
+                <?php endif; ?>
+                <div class="col-md-8">
+                    <div class="card-body">
+                        <h4 class="text-primary"><?php echo $safe_property->currency . ' ' . number_format($safe_property->price); ?></h4>
+                        <h5><a href="<?php echo $safe_property->url; ?>"><?php echo $safe_property->title; ?></a></h5>
+                        <p class="text-muted"><?php echo $safe_property->town . ', ' . $safe_property->province; ?></p>
+                        <a href="<?php echo $safe_property->url; ?>" class="btn btn-primary">
+                            <?php esc_html_e('View Details', 'property-manager-pro'); ?>
+                        </a>
+                    </div>
+                </div>
+            </div>
+        </div>
+        <?php
+    }
+    
+    /**
+     * Helper: Prepare map data
+     */
+    private function prepare_map_data($properties) {
+        $map_data = array();
+        
+        foreach ($properties as $property) {
+            if (!empty($property->latitude) && !empty($property->longitude)) {
+                $map_data[] = array(
+                    'id' => absint($property->id),
+                    'title' => esc_html($property->title),
+                    'price' => esc_html($property->currency . ' ' . number_format($property->price)),
+                    'url' => esc_url(home_url('/property/' . $property->id)),
+                    'lat' => floatval($property->latitude),
+                    'lng' => floatval($property->longitude)
+                );
+            }
+        }
+        
+        return $map_data;
+    }
+    
+    /**
+     * Helper: Get sanitized search parameters
+     */
+    private function get_sanitized_search_params() {
+        $params = array();
+        
+        $text_fields = array('location', 'town', 'province', 'keyword', 'property_type');
+        foreach ($text_fields as $field) {
+            if (isset($_GET[$field]) && !empty($_GET[$field])) {
+                $params[$field] = sanitize_text_field($_GET[$field]);
+            }
+        }
+        
+        $numeric_fields = array('price_min', 'price_max', 'beds_min', 'beds_max', 'baths_min', 'baths_max');
+        foreach ($numeric_fields as $field) {
+            if (isset($_GET[$field]) && $_GET[$field] !== '') {
+                $params[$field] = absint($_GET[$field]);
+            }
+        }
+        
+        $boolean_fields = array('pool', 'new_build');
+        foreach ($boolean_fields as $field) {
+            if (isset($_GET[$field]) && $_GET[$field] == '1') {
+                $params[$field] = 1;
+            }
+        }
+        
+        return $params;
+    }
+    
+    /**
+     * Helper: Render login required message
+     */
+    private function render_login_required_message() {
+        ob_start();
+        ?>
+        <div class="alert alert-warning text-center">
+            <h4><?php esc_html_e('Login Required', 'property-manager-pro'); ?></h4>
+            <p><?php esc_html_e('Please login to access this feature.', 'property-manager-pro'); ?></p>
+            <a href="<?php echo esc_url(wp_login_url(get_permalink())); ?>" class="btn btn-primary">
+                <?php esc_html_e('Login', 'property-manager-pro'); ?>
+            </a>
+        </div>
+        <?php
+        return ob_get_clean();
     }
 }

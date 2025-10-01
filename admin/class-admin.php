@@ -1,6 +1,8 @@
 <?php
 /**
- * Main Admin interface class
+ * Main Admin Interface Class - Property Manager Pro
+ * 
+ * Handles all admin functionality with complete security measures
  * 
  * @package PropertyManagerPro
  */
@@ -12,375 +14,1213 @@ if (!defined('ABSPATH')) {
 
 class PropertyManager_Admin {
     
-	private static $instance = null;
-
-	public static function get_instance() {
-		if (null === self::$instance) {
-			self::$instance = new self();
-		}
-		return self::$instance;
-	}
-
-	private function __construct() {
-		add_action('admin_menu', array($this, 'add_admin_menu'));
-		add_action('admin_init', array($this, 'init_settings'));
-		add_action('wp_ajax_property_manager_import_feed', array($this, 'ajax_import_feed'));
-		add_action('wp_ajax_property_manager_process_images', array($this, 'ajax_process_images'));
-		add_action('wp_ajax_property_manager_retry_failed_images', array($this, 'ajax_retry_failed_images'));
-		add_action('wp_ajax_property_manager_test_email', array($this, 'ajax_test_email'));
-	}
-
-	public function add_admin_menu() {
-		add_menu_page(
-			__('Property Manager', 'property-manager-pro'),
-			__('Properties', 'property-manager-pro'),
-			'manage_options',
-			'property-manager',
-			array($this, 'dashboard_page'),
-			'dashicons-building',
-			30
-		);
-		
-		add_submenu_page('property-manager', __('Image Management', 'property-manager-pro'), __('Images', 'property-manager-pro'), 'manage_options', 'property-manager-images', array($this, 'images_page'));
-		add_submenu_page('property-manager', __('Dashboard', 'property-manager-pro'), __('Dashboard', 'property-manager-pro'), 'manage_options', 'property-manager', array($this, 'dashboard_page'));
-		add_submenu_page('property-manager', __('All Properties', 'property-manager-pro'), __('All Properties', 'property-manager-pro'), 'manage_options', 'property-manager-properties', array($this, 'properties_page'));
-		add_submenu_page('property-manager', __('Import Feed', 'property-manager-pro'), __('Import Feed', 'property-manager-pro'), 'manage_options', 'property-manager-import', array($this, 'import_page'));
-		add_submenu_page('property-manager', __('Property Alerts', 'property-manager-pro'), __('Property Alerts', 'property-manager-pro'), 'manage_options', 'property-manager-alerts', array($this, 'alerts_page'));
-		add_submenu_page('property-manager', __('Inquiries', 'property-manager-pro'), __('Inquiries', 'property-manager-pro'), 'manage_options', 'property-manager-inquiries', array($this, 'inquiries_page'));
-		add_submenu_page('property-manager', __('Settings', 'property-manager-pro'), __('Settings', 'property-manager-pro'), 'manage_options', 'property-manager-settings', array($this, 'settings_page'));
-	}
-
-	public function init_settings() {
-		register_setting('property_manager_settings', 'property_manager_options', array($this, 'sanitize_options'));
-		
-		add_settings_section('property_manager_general', __('General Settings', 'property-manager-pro'), null, 'property-manager-settings');
-		add_settings_field('immediate_image_download', __('Download Images Immediately', 'property-manager-pro'), array($this, 'field_immediate_image_download'), 'property-manager-settings', 'property_manager_general');
-		add_settings_field('feed_url', __('Kyero Feed URL', 'property-manager-pro'), array($this, 'field_feed_url'), 'property-manager-settings', 'property_manager_general');
-		add_settings_field('import_frequency', __('Import Frequency', 'property-manager-pro'), array($this, 'field_import_frequency'), 'property-manager-settings', 'property_manager_general');
-		add_settings_field('results_per_page', __('Results Per Page', 'property-manager-pro'), array($this, 'field_results_per_page'), 'property-manager-settings', 'property_manager_general');
-		add_settings_field('default_view', __('Default View', 'property-manager-pro'), array($this, 'field_default_view'), 'property-manager-settings', 'property_manager_general');
-		
-		add_settings_section('property_manager_email', __('Email Settings', 'property-manager-pro'), null, 'property-manager-settings');
-		add_settings_field('admin_email', __('Admin Email', 'property-manager-pro'), array($this, 'field_admin_email'), 'property-manager-settings', 'property_manager_email');
-		add_settings_field('email_verification_required', __('Email Verification Required', 'property-manager-pro'), array($this, 'field_email_verification'), 'property-manager-settings', 'property_manager_email');
-		
-		add_settings_section('property_manager_map', __('Map Settings', 'property-manager-pro'), null, 'property-manager-settings');
-		add_settings_field('enable_map', __('Enable Map View', 'property-manager-pro'), array($this, 'field_enable_map'), 'property-manager-settings', 'property_manager_map');
-		add_settings_field('map_provider', __('Map Provider', 'property-manager-pro'), array($this, 'field_map_provider'), 'property-manager-settings', 'property_manager_map');
-	}
-
-	public function sanitize_options($input) {
-		$sanitized = array();
-		
-		if (isset($input['feed_url'])) {
-			$sanitized['feed_url'] = esc_url_raw($input['feed_url']);
-		}
-		
-		if (isset($input['import_frequency'])) {
-			$allowed = array('hourly', 'twicedaily', 'daily');
-			$sanitized['import_frequency'] = in_array($input['import_frequency'], $allowed) ? $input['import_frequency'] : 'hourly';
-		}
-		
-		if (isset($input['results_per_page'])) {
-			$sanitized['results_per_page'] = max(1, min(100, absint($input['results_per_page'])));
-		}
-		
-		if (isset($input['default_view'])) {
-			$allowed = array('grid', 'list', 'map');
-			$sanitized['default_view'] = in_array($input['default_view'], $allowed) ? $input['default_view'] : 'grid';
-		}
-		
-		if (isset($input['admin_email'])) {
-			$sanitized['admin_email'] = sanitize_email($input['admin_email']);
-		}
-		
-		$sanitized['email_verification_required'] = isset($input['email_verification_required']) ? 1 : 0;
-		$sanitized['enable_map'] = isset($input['enable_map']) ? 1 : 0;
-		$sanitized['immediate_image_download'] = isset($input['immediate_image_download']) ? 1 : 0;
-		
-		if (isset($input['map_provider'])) {
-			$allowed = array('openstreetmap', 'mapbox');
-			$sanitized['map_provider'] = in_array($input['map_provider'], $allowed) ? $input['map_provider'] : 'openstreetmap';
-		}
-		
-		return $sanitized;
-	}
-
-	public function dashboard_page() {
-		if (!current_user_can('manage_options')) {
-			wp_die(__('You do not have sufficient permissions.', 'property-manager-pro'));
-		}
-		
-		$property_manager = PropertyManager_Property::get_instance();
-		$stats = $property_manager->get_property_stats();
-		$importer = PropertyManager_FeedImporter::get_instance();
-		$import_logs = $importer->get_import_stats(5);
-		$image_downloader = PropertyManager_ImageDownloader::get_instance();
-		$image_stats = $image_downloader->get_image_stats();
-		
-		include PROPERTY_MANAGER_PLUGIN_PATH . 'admin/views/dashboard.php';
-	}
-
-	public function properties_page() {
-		if (!current_user_can('manage_options')) {
-			wp_die(__('You do not have sufficient permissions.', 'property-manager-pro'));
-		}
-		
-		$property_manager = PropertyManager_Property::get_instance();
-		
-		if (isset($_POST['action']) && $_POST['action'] === 'bulk_delete' && isset($_POST['properties'])) {
-			check_admin_referer('property_manager_bulk_action');
-			$this->handle_bulk_delete($_POST['properties']);
-		}
-		
-		$page = isset($_GET['paged']) ? max(1, intval($_GET['paged'])) : 1;
-		$per_page = 20;
-		$search = isset($_GET['s']) ? sanitize_text_field($_GET['s']) : '';
-		
-		$search_args = array('page' => $page, 'per_page' => $per_page, 'orderby' => 'updated_at', 'order' => 'DESC');
-		if (!empty($search)) {
-			$search_args['keyword'] = $search;
-		}
-		
-		$results = $property_manager->search_properties($search_args);
-		
-		include PROPERTY_MANAGER_PLUGIN_PATH . 'admin/views/properties.php';
-	}
-
-	public function import_page() {
-		if (!current_user_can('manage_options')) {
-			wp_die(__('You do not have sufficient permissions.', 'property-manager-pro'));
-		}
-		
-		include PROPERTY_MANAGER_PLUGIN_PATH . 'admin/views/import.php';
-	}
-
-	public function alerts_page() {
-		if (!current_user_can('manage_options')) {
-			wp_die(__('You do not have sufficient permissions.', 'property-manager-pro'));
-		}
-		
-		global $wpdb;
-		$alerts_table = PropertyManager_Database::get_table_name('property_alerts');
-		$page = isset($_GET['paged']) ? max(1, intval($_GET['paged'])) : 1;
-		$per_page = 20;
-		$offset = ($page - 1) * $per_page;
-		
-		$alerts = $wpdb->get_results($wpdb->prepare("SELECT * FROM $alerts_table ORDER BY created_at DESC LIMIT %d OFFSET %d", $per_page, $offset));
-		$total_alerts = $wpdb->get_var("SELECT COUNT(*) FROM $alerts_table");
-		$total_pages = ceil($total_alerts / $per_page);
-		
-		include PROPERTY_MANAGER_PLUGIN_PATH . 'admin/views/alerts.php';
-	}
-
-	public function inquiries_page() {
-		if (!current_user_can('manage_options')) {
-			wp_die(__('You do not have sufficient permissions.', 'property-manager-pro'));
-		}
-		
-		global $wpdb;
-		$inquiries_table = PropertyManager_Database::get_table_name('property_inquiries');
-		$properties_table = PropertyManager_Database::get_table_name('properties');
-		
-		if (isset($_POST['update_status']) && isset($_POST['inquiry_id']) && isset($_POST['status'])) {
-			check_admin_referer('update_inquiry_status');
-			$inquiry_id = absint($_POST['inquiry_id']);
-			$status = sanitize_text_field($_POST['status']);
-			$allowed = array('new', 'read', 'replied');
-			if (in_array($status, $allowed)) {
-				$wpdb->update($inquiries_table, array('status' => $status, 'updated_at' => current_time('mysql')), array('id' => $inquiry_id), array('%s', '%s'), array('%d'));
-				echo '<div class="notice notice-success"><p>' . esc_html__('Inquiry status updated.', 'property-manager-pro') . '</p></div>';
-			}
-		}
-		
-		$page = isset($_GET['paged']) ? max(1, intval($_GET['paged'])) : 1;
-		$per_page = 20;
-		$offset = ($page - 1) * $per_page;
-		
-		$inquiries = $wpdb->get_results($wpdb->prepare("SELECT i.*, p.title as property_title, p.ref as property_ref FROM $inquiries_table i LEFT JOIN $properties_table p ON i.property_id = p.id ORDER BY i.created_at DESC LIMIT %d OFFSET %d", $per_page, $offset));
-		$total_inquiries = $wpdb->get_var("SELECT COUNT(*) FROM $inquiries_table");
-		$total_pages = ceil($total_inquiries / $per_page);
-		
-		include PROPERTY_MANAGER_PLUGIN_PATH . 'admin/views/inquiries.php';
-	}
-
-	public function settings_page() {
-		if (!current_user_can('manage_options')) {
-			wp_die(__('You do not have sufficient permissions.', 'property-manager-pro'));
-		}
-		?>
-		<div class="wrap">
-			<h1><?php _e('Property Manager Settings', 'property-manager-pro'); ?></h1>
-			<form method="post" action="options.php">
-				<?php settings_fields('property_manager_settings'); ?>
-				<?php do_settings_sections('property-manager-settings'); ?>
-				<?php submit_button(); ?>
-			</form>
-		</div>
-		<?php
-	}
-
-	public function images_page() {
-		if (!current_user_can('manage_options')) {
-			wp_die(__('You do not have sufficient permissions.', 'property-manager-pro'));
-		}
-		
-		$image_downloader = PropertyManager_ImageDownloader::get_instance();
-		$image_stats = $image_downloader->get_image_stats();
-		
-		include PROPERTY_MANAGER_PLUGIN_PATH . 'admin/views/images.php';
-	}
-
-	public function field_feed_url() {
-		$options = get_option('property_manager_options', array());
-		$value = isset($options['feed_url']) ? $options['feed_url'] : '';
-		echo '<input type="url" name="property_manager_options[feed_url]" value="' . esc_attr($value) . '" class="large-text" />';
-		echo '<p class="description">' . esc_html__('Enter the URL to your Kyero XML feed.', 'property-manager-pro') . '</p>';
-	}
-
-	public function field_import_frequency() {
-		$options = get_option('property_manager_options', array());
-		$value = isset($options['import_frequency']) ? $options['import_frequency'] : 'hourly';
-		$frequencies = array('hourly' => __('Hourly', 'property-manager-pro'), 'twicedaily' => __('Twice Daily', 'property-manager-pro'), 'daily' => __('Daily', 'property-manager-pro'));
-		echo '<select name="property_manager_options[import_frequency]">';
-		foreach ($frequencies as $key => $label) {
-			echo '<option value="' . esc_attr($key) . '" ' . selected($value, $key, false) . '>' . esc_html($label) . '</option>';
-		}
-		echo '</select>';
-	}
-
-	public function field_results_per_page() {
-		$options = get_option('property_manager_options', array());
-		$value = isset($options['results_per_page']) ? $options['results_per_page'] : 20;
-		echo '<input type="number" name="property_manager_options[results_per_page]" value="' . esc_attr($value) . '" min="1" max="100" />';
-		echo '<p class="description">' . esc_html__('Number of properties per page.', 'property-manager-pro') . '</p>';
-	}
-
-	public function field_default_view() {
-		$options = get_option('property_manager_options', array());
-		$value = isset($options['default_view']) ? $options['default_view'] : 'grid';
-		$views = array('grid' => __('Grid View', 'property-manager-pro'), 'list' => __('List View', 'property-manager-pro'), 'map' => __('Map View', 'property-manager-pro'));
-		echo '<select name="property_manager_options[default_view]">';
-		foreach ($views as $key => $label) {
-			echo '<option value="' . esc_attr($key) . '" ' . selected($value, $key, false) . '>' . esc_html($label) . '</option>';
-		}
-		echo '</select>';
-	}
-
-	public function field_admin_email() {
-		$options = get_option('property_manager_options', array());
-		$value = isset($options['admin_email']) ? $options['admin_email'] : get_option('admin_email');
-		echo '<input type="email" name="property_manager_options[admin_email]" value="' . esc_attr($value) . '" class="regular-text" />';
-		echo '<p class="description">' . esc_html__('Email for property inquiries.', 'property-manager-pro') . '</p>';
-	}
-
-	public function field_email_verification() {
-		$options = get_option('property_manager_options', array());
-		$value = isset($options['email_verification_required']) ? $options['email_verification_required'] : true;
-		echo '<label><input type="checkbox" name="property_manager_options[email_verification_required]" value="1" ' . checked($value, true, false) . ' /> ' . esc_html__('Require email verification', 'property-manager-pro') . '</label>';
-	}
-
-	public function field_enable_map() {
-		$options = get_option('property_manager_options', array());
-		$value = isset($options['enable_map']) ? $options['enable_map'] : true;
-		echo '<label><input type="checkbox" name="property_manager_options[enable_map]" value="1" ' . checked($value, true, false) . ' /> ' . esc_html__('Enable map view', 'property-manager-pro') . '</label>';
-	}
-
-	public function field_immediate_image_download() {
-		$options = get_option('property_manager_options', array());
-		$value = isset($options['immediate_image_download']) ? $options['immediate_image_download'] : false;
-		echo '<label><input type="checkbox" name="property_manager_options[immediate_image_download]" value="1" ' . checked($value, true, false) . ' /> ' . esc_html__('Download images immediately', 'property-manager-pro') . '</label>';
-		echo '<p class="description">' . esc_html__('Images will be processed via cron if unchecked.', 'property-manager-pro') . '</p>';
-	}
-
-	public function field_map_provider() {
-		$options = get_option('property_manager_options', array());
-		$value = isset($options['map_provider']) ? $options['map_provider'] : 'openstreetmap';
-		$providers = array('openstreetmap' => __('OpenStreetMap (Free)', 'property-manager-pro'), 'mapbox' => __('Mapbox', 'property-manager-pro'));
-		echo '<select name="property_manager_options[map_provider]">';
-		foreach ($providers as $key => $label) {
-			echo '<option value="' . esc_attr($key) . '" ' . selected($value, $key, false) . '>' . esc_html($label) . '</option>';
-		}
-		echo '</select>';
-	}
-
-	public function ajax_import_feed() {
-		check_ajax_referer('property_manager_import', 'nonce');
-		if (!current_user_can('manage_options')) {
-			wp_send_json_error(array('message' => __('Insufficient permissions.', 'property-manager-pro')));
-		}
-		
-		$importer = PropertyManager_FeedImporter::get_instance();
-		$result = $importer->manual_import();
-		
-		if ($result) {
-			wp_send_json_success(array('message' => sprintf(__('Import completed. Imported: %d, Updated: %d, Failed: %d', 'property-manager-pro'), $result['imported'], $result['updated'], $result['failed'])));
-		} else {
-			wp_send_json_error(array('message' => __('Import failed.', 'property-manager-pro')));
-		}
-	}
-
-	public function ajax_process_images() {
-		check_ajax_referer('property_manager_images', 'nonce');
-		if (!current_user_can('manage_options')) {
-			wp_send_json_error(array('message' => __('Insufficient permissions.', 'property-manager-pro')));
-		}
-		
-		$image_downloader = PropertyManager_ImageDownloader::get_instance();
-		$processed = $image_downloader->process_pending_images(20);
-		wp_send_json_success(array('processed' => $processed, 'message' => sprintf(__('Processed %d images', 'property-manager-pro'), $processed)));
-	}
-
-	public function ajax_retry_failed_images() {
-		check_ajax_referer('property_manager_images', 'nonce');
-		if (!current_user_can('manage_options')) {
-			wp_send_json_error(array('message' => __('Insufficient permissions.', 'property-manager-pro')));
-		}
-		
-		$image_downloader = PropertyManager_ImageDownloader::get_instance();
-		$retried = $image_downloader->retry_failed_downloads(20);
-		wp_send_json_success(array('retried' => $retried, 'message' => sprintf(__('Queued %d failed images', 'property-manager-pro'), $retried)));
-	}
-
-	public function ajax_test_email() {
-		check_ajax_referer('property_manager_test_email', 'nonce');
-		if (!current_user_can('manage_options')) {
-			wp_send_json_error(array('message' => __('Insufficient permissions.', 'property-manager-pro')));
-		}
-		
-		$email = isset($_POST['email']) ? sanitize_email($_POST['email']) : '';
-		if (!is_email($email)) {
-			wp_send_json_error(array('message' => __('Invalid email.', 'property-manager-pro')));
-		}
-		
-		$result = wp_mail($email, __('Test Email', 'property-manager-pro'), __('This is a test email.', 'property-manager-pro'));
-		
-		if ($result) {
-			wp_send_json_success(array('message' => __('Test email sent!', 'property-manager-pro')));
-		} else {
-			wp_send_json_error(array('message' => __('Failed to send.', 'property-manager-pro')));
-		}
-	}
-
-	private function handle_bulk_delete($property_ids) {
-		if (!current_user_can('manage_options')) {
-			wp_die(__('Insufficient permissions.', 'property-manager-pro'));
-		}
-		
-		if (!is_array($property_ids)) {
-			return;
-		}
-		
-		$deleted = 0;
-		foreach ($property_ids as $property_id) {
-			$property_id = absint($property_id);
-			if ($property_id > 0 && PropertyManager_Database::delete_property($property_id)) {
-				$deleted++;
-			}
-		}
-		
-		add_action('admin_notices', function() use ($deleted) {
-			echo '<div class="notice notice-success is-dismissible"><p>' . sprintf(esc_html__('%d properties deleted.', 'property-manager-pro'), $deleted) . '</p></div>';
-		});
-	}	
+    private static $instance = null;
+    
+    // Rate limiting settings
+    private $rate_limit_attempts = 5;
+    private $rate_limit_window = 300; // 5 minutes
+    
+    /**
+     * Get singleton instance
+     */
+    public static function get_instance() {
+        if (null === self::$instance) {
+            self::$instance = new self();
+        }
+        return self::$instance;
+    }
+    
+    /**
+     * Constructor
+     */
+    private function __construct() {
+        add_action('admin_menu', array($this, 'add_admin_menu'));
+        add_action('admin_init', array($this, 'init_settings'));
+        add_action('admin_init', array($this, 'handle_admin_actions'));
+        add_action('admin_enqueue_scripts', array($this, 'enqueue_admin_assets'));
+        
+        // AJAX handlers with security
+        add_action('wp_ajax_property_manager_import_feed', array($this, 'ajax_import_feed'));
+        add_action('wp_ajax_property_manager_process_images', array($this, 'ajax_process_images'));
+        add_action('wp_ajax_property_manager_retry_failed_images', array($this, 'ajax_retry_failed_images'));
+        add_action('wp_ajax_property_manager_test_email', array($this, 'ajax_test_email'));
+        add_action('wp_ajax_property_manager_delete_property', array($this, 'ajax_delete_property'));
+        add_action('wp_ajax_property_manager_test_feed_url', array($this, 'ajax_test_feed_url'));
+        
+        // Admin notices
+        add_action('admin_notices', array($this, 'display_admin_notices'));
+        
+        // Load admin page classes
+        $this->load_admin_pages();
+    }
+    
+    /**
+     * Load admin page classes
+     */
+    private function load_admin_pages() {
+        require_once PROPERTY_MANAGER_PLUGIN_PATH . 'admin/pages/class-dashboard.php';
+        require_once PROPERTY_MANAGER_PLUGIN_PATH . 'admin/pages/class-properties.php';
+        require_once PROPERTY_MANAGER_PLUGIN_PATH . 'admin/pages/class-images.php';
+        require_once PROPERTY_MANAGER_PLUGIN_PATH . 'admin/pages/class-alerts.php';
+        require_once PROPERTY_MANAGER_PLUGIN_PATH . 'admin/pages/class-inquiries.php';
+        require_once PROPERTY_MANAGER_PLUGIN_PATH . 'admin/pages/class-settings.php';
+    }
+    
+    /**
+     * Add admin menu
+     */
+    public function add_admin_menu() {
+        // Main menu
+        add_menu_page(
+            __('Property Manager', 'property-manager-pro'),
+            __('Properties', 'property-manager-pro'),
+            'manage_options',
+            'property-manager',
+            array($this, 'dashboard_page'),
+            'dashicons-building',
+            30
+        );
+        
+        // Dashboard (rename first submenu)
+        add_submenu_page(
+            'property-manager',
+            __('Dashboard', 'property-manager-pro'),
+            __('Dashboard', 'property-manager-pro'),
+            'manage_options',
+            'property-manager',
+            array($this, 'dashboard_page')
+        );
+        
+        // All Properties
+        add_submenu_page(
+            'property-manager',
+            __('All Properties', 'property-manager-pro'),
+            __('All Properties', 'property-manager-pro'),
+            'manage_options',
+            'property-manager-properties',
+            array($this, 'properties_page')
+        );
+        
+        // Image Management
+        add_submenu_page(
+            'property-manager',
+            __('Image Management', 'property-manager-pro'),
+            __('Images', 'property-manager-pro'),
+            'manage_options',
+            'property-manager-images',
+            array($this, 'images_page')
+        );
+        
+        // Import Feed
+        add_submenu_page(
+            'property-manager',
+            __('Import Feed', 'property-manager-pro'),
+            __('Import Feed', 'property-manager-pro'),
+            'manage_options',
+            'property-manager-import',
+            array($this, 'import_page')
+        );
+        
+        // Property Alerts
+        add_submenu_page(
+            'property-manager',
+            __('Property Alerts', 'property-manager-pro'),
+            __('Alerts', 'property-manager-pro'),
+            'manage_options',
+            'property-manager-alerts',
+            array($this, 'alerts_page')
+        );
+        
+        // Inquiries
+        add_submenu_page(
+            'property-manager',
+            __('Inquiries', 'property-manager-pro'),
+            __('Inquiries', 'property-manager-pro'),
+            'manage_options',
+            'property-manager-inquiries',
+            array($this, 'inquiries_page')
+        );
+        
+        // Settings
+        add_submenu_page(
+            'property-manager',
+            __('Settings', 'property-manager-pro'),
+            __('Settings', 'property-manager-pro'),
+            'manage_options',
+            'property-manager-settings',
+            array($this, 'settings_page')
+        );
+    }
+    
+    /**
+     * Enqueue admin assets
+     */
+    public function enqueue_admin_assets($hook) {
+        // Only load on our admin pages
+        if (strpos($hook, 'property-manager') === false) {
+            return;
+        }
+        
+        // Styles
+        wp_enqueue_style(
+            'property-manager-admin',
+            PROPERTY_MANAGER_PLUGIN_URL . 'assets/css/admin.css',
+            array(),
+            PROPERTY_MANAGER_VERSION
+        );
+        
+        // Scripts
+        wp_enqueue_script(
+            'property-manager-admin',
+            PROPERTY_MANAGER_PLUGIN_URL . 'assets/js/admin.js',
+            array('jquery'),
+            PROPERTY_MANAGER_VERSION,
+            true
+        );
+        
+        // Localize script
+        wp_localize_script('property-manager-admin', 'propertyManagerAdmin', array(
+            'ajaxUrl' => admin_url('admin-ajax.php'),
+            'nonce' => wp_create_nonce('property_manager_admin_nonce'),
+            'strings' => array(
+                'confirmDelete' => __('Are you sure you want to delete this item? This cannot be undone.', 'property-manager-pro'),
+                'confirmImport' => __('Start property import?', 'property-manager-pro'),
+                'processing' => __('Processing...', 'property-manager-pro'),
+                'success' => __('Success!', 'property-manager-pro'),
+                'error' => __('An error occurred. Please try again.', 'property-manager-pro')
+            )
+        ));
+    }
+    
+    /**
+     * Initialize settings
+     */
+    public function init_settings() {
+        register_setting(
+            'property_manager_settings',
+            'property_manager_options',
+            array($this, 'sanitize_options')
+        );
+        
+        // General Settings Section
+        add_settings_section(
+            'property_manager_general',
+            __('General Settings', 'property-manager-pro'),
+            array($this, 'general_settings_description'),
+            'property-manager-settings'
+        );
+        
+        add_settings_field(
+            'feed_url',
+            __('Kyero Feed URL', 'property-manager-pro'),
+            array($this, 'field_feed_url'),
+            'property-manager-settings',
+            'property_manager_general'
+        );
+        
+        add_settings_field(
+            'import_frequency',
+            __('Import Frequency', 'property-manager-pro'),
+            array($this, 'field_import_frequency'),
+            'property-manager-settings',
+            'property_manager_general'
+        );
+        
+        add_settings_field(
+            'immediate_image_download',
+            __('Download Images Immediately', 'property-manager-pro'),
+            array($this, 'field_immediate_image_download'),
+            'property-manager-settings',
+            'property_manager_general'
+        );
+        
+        add_settings_field(
+            'results_per_page',
+            __('Results Per Page', 'property-manager-pro'),
+            array($this, 'field_results_per_page'),
+            'property-manager-settings',
+            'property_manager_general'
+        );
+        
+        add_settings_field(
+            'default_view',
+            __('Default View', 'property-manager-pro'),
+            array($this, 'field_default_view'),
+            'property-manager-settings',
+            'property_manager_general'
+        );
+        
+        // Email Settings Section
+        add_settings_section(
+            'property_manager_email',
+            __('Email Settings', 'property-manager-pro'),
+            array($this, 'email_settings_description'),
+            'property-manager-settings'
+        );
+        
+        add_settings_field(
+            'admin_email',
+            __('Admin Email', 'property-manager-pro'),
+            array($this, 'field_admin_email'),
+            'property-manager-settings',
+            'property_manager_email'
+        );
+        
+        add_settings_field(
+            'email_verification_required',
+            __('Email Verification Required', 'property-manager-pro'),
+            array($this, 'field_email_verification'),
+            'property-manager-settings',
+            'property_manager_email'
+        );
+        
+        // Map Settings Section
+        add_settings_section(
+            'property_manager_map',
+            __('Map Settings', 'property-manager-pro'),
+            array($this, 'map_settings_description'),
+            'property-manager-settings'
+        );
+        
+        add_settings_field(
+            'enable_map',
+            __('Enable Map View', 'property-manager-pro'),
+            array($this, 'field_enable_map'),
+            'property-manager-settings',
+            'property_manager_map'
+        );
+        
+        add_settings_field(
+            'map_provider',
+            __('Map Provider', 'property-manager-pro'),
+            array($this, 'field_map_provider'),
+            'property-manager-settings',
+            'property_manager_map'
+        );
+    }
+    
+    /**
+     * Settings section descriptions
+     */
+    public function general_settings_description() {
+        echo '<p>' . esc_html__('Configure general plugin settings and property import options.', 'property-manager-pro') . '</p>';
+    }
+    
+    public function email_settings_description() {
+        echo '<p>' . esc_html__('Configure email notifications and verification settings.', 'property-manager-pro') . '</p>';
+    }
+    
+    public function map_settings_description() {
+        echo '<p>' . esc_html__('Configure map display settings for property locations.', 'property-manager-pro') . '</p>';
+    }
+    
+    /**
+     * Sanitize options with validation
+     */
+    public function sanitize_options($input) {
+        $sanitized = array();
+        $errors = array();
+        
+        // Feed URL
+        if (isset($input['feed_url'])) {
+            $feed_url = esc_url_raw($input['feed_url'], array('http', 'https'));
+            
+            // Validate URL scheme
+            if (!empty($feed_url)) {
+                $parsed_url = parse_url($feed_url);
+                if (!isset($parsed_url['scheme']) || !in_array($parsed_url['scheme'], array('http', 'https'))) {
+                    $errors[] = __('Feed URL must use HTTP or HTTPS protocol.', 'property-manager-pro');
+                } else {
+                    $sanitized['feed_url'] = $feed_url;
+                }
+            }
+        }
+        
+        // Import frequency
+        if (isset($input['import_frequency'])) {
+            $allowed_frequencies = array('hourly', 'twicedaily', 'daily');
+            $frequency = sanitize_text_field($input['import_frequency']);
+            
+            if (in_array($frequency, $allowed_frequencies)) {
+                $sanitized['import_frequency'] = $frequency;
+            } else {
+                $sanitized['import_frequency'] = 'hourly';
+                $errors[] = __('Invalid import frequency selected.', 'property-manager-pro');
+            }
+        }
+        
+        // Results per page
+        if (isset($input['results_per_page'])) {
+            $results_per_page = absint($input['results_per_page']);
+            
+            if ($results_per_page < 1 || $results_per_page > 100) {
+                $errors[] = __('Results per page must be between 1 and 100.', 'property-manager-pro');
+                $sanitized['results_per_page'] = 20;
+            } else {
+                $sanitized['results_per_page'] = $results_per_page;
+            }
+        }
+        
+        // Default view
+        if (isset($input['default_view'])) {
+            $allowed_views = array('grid', 'list', 'map');
+            $view = sanitize_text_field($input['default_view']);
+            
+            if (in_array($view, $allowed_views)) {
+                $sanitized['default_view'] = $view;
+            } else {
+                $sanitized['default_view'] = 'grid';
+                $errors[] = __('Invalid default view selected.', 'property-manager-pro');
+            }
+        }
+        
+        // Admin email
+        if (isset($input['admin_email'])) {
+            $email = sanitize_email($input['admin_email']);
+            
+            if (is_email($email)) {
+                $sanitized['admin_email'] = $email;
+            } else {
+                $errors[] = __('Invalid admin email address.', 'property-manager-pro');
+                $sanitized['admin_email'] = get_option('admin_email');
+            }
+        }
+        
+        // Boolean settings
+        $sanitized['email_verification_required'] = isset($input['email_verification_required']) ? 1 : 0;
+        $sanitized['enable_map'] = isset($input['enable_map']) ? 1 : 0;
+        $sanitized['immediate_image_download'] = isset($input['immediate_image_download']) ? 1 : 0;
+        
+        // Map provider
+        if (isset($input['map_provider'])) {
+            $allowed_providers = array('openstreetmap', 'mapbox');
+            $provider = sanitize_text_field($input['map_provider']);
+            
+            if (in_array($provider, $allowed_providers)) {
+                $sanitized['map_provider'] = $provider;
+            } else {
+                $sanitized['map_provider'] = 'openstreetmap';
+                $errors[] = __('Invalid map provider selected.', 'property-manager-pro');
+            }
+        }
+        
+        // Display errors
+        if (!empty($errors)) {
+            foreach ($errors as $error) {
+                add_settings_error('property_manager_options', 'property_manager_error', $error, 'error');
+            }
+        }
+        
+        // Log settings change
+        $this->log_admin_action('settings_updated', array(
+            'changes' => array_keys($input)
+        ));
+        
+        return $sanitized;
+    }
+    
+    /**
+     * Settings field callbacks
+     */
+    public function field_feed_url() {
+        $options = get_option('property_manager_options', array());
+        $value = isset($options['feed_url']) ? $options['feed_url'] : '';
+        ?>
+        <input type="url" 
+               name="property_manager_options[feed_url]" 
+               id="feed_url"
+               value="<?php echo esc_attr($value); ?>" 
+               class="large-text" 
+               placeholder="https://example.com/feed.xml" />
+        <p class="description">
+            <?php esc_html_e('Enter the URL to your Kyero XML feed.', 'property-manager-pro'); ?>
+            <button type="button" class="button button-secondary" id="test-feed-url" style="margin-left: 10px;">
+                <?php esc_html_e('Test URL', 'property-manager-pro'); ?>
+            </button>
+        </p>
+        <div id="feed-url-test-result" style="margin-top: 10px;"></div>
+        <?php
+    }
+    
+    public function field_import_frequency() {
+        $options = get_option('property_manager_options', array());
+        $value = isset($options['import_frequency']) ? $options['import_frequency'] : 'hourly';
+        
+        $frequencies = array(
+            'hourly' => __('Hourly', 'property-manager-pro'),
+            'twicedaily' => __('Twice Daily', 'property-manager-pro'),
+            'daily' => __('Daily', 'property-manager-pro')
+        );
+        ?>
+        <select name="property_manager_options[import_frequency]" id="import_frequency">
+            <?php foreach ($frequencies as $key => $label): ?>
+                <option value="<?php echo esc_attr($key); ?>" <?php selected($value, $key); ?>>
+                    <?php echo esc_html($label); ?>
+                </option>
+            <?php endforeach; ?>
+        </select>
+        <p class="description"><?php esc_html_e('How often should the feed be imported automatically?', 'property-manager-pro'); ?></p>
+        <?php
+    }
+    
+    public function field_immediate_image_download() {
+        $options = get_option('property_manager_options', array());
+        $value = isset($options['immediate_image_download']) ? $options['immediate_image_download'] : 0;
+        ?>
+        <label>
+            <input type="checkbox" 
+                   name="property_manager_options[immediate_image_download]" 
+                   value="1" 
+                   <?php checked($value, 1); ?> />
+            <?php esc_html_e('Download images immediately during feed import (slower but complete)', 'property-manager-pro'); ?>
+        </label>
+        <p class="description"><?php esc_html_e('If disabled, images will be queued for background processing.', 'property-manager-pro'); ?></p>
+        <?php
+    }
+    
+    public function field_results_per_page() {
+        $options = get_option('property_manager_options', array());
+        $value = isset($options['results_per_page']) ? $options['results_per_page'] : 20;
+        ?>
+        <input type="number" 
+               name="property_manager_options[results_per_page]" 
+               value="<?php echo esc_attr($value); ?>" 
+               min="1" 
+               max="100" 
+               class="small-text" />
+        <p class="description"><?php esc_html_e('Number of properties to display per page (1-100).', 'property-manager-pro'); ?></p>
+        <?php
+    }
+    
+    public function field_default_view() {
+        $options = get_option('property_manager_options', array());
+        $value = isset($options['default_view']) ? $options['default_view'] : 'grid';
+        
+        $views = array(
+            'grid' => __('Grid View', 'property-manager-pro'),
+            'list' => __('List View', 'property-manager-pro'),
+            'map' => __('Map View', 'property-manager-pro')
+        );
+        ?>
+        <select name="property_manager_options[default_view]" id="default_view">
+            <?php foreach ($views as $key => $label): ?>
+                <option value="<?php echo esc_attr($key); ?>" <?php selected($value, $key); ?>>
+                    <?php echo esc_html($label); ?>
+                </option>
+            <?php endforeach; ?>
+        </select>
+        <?php
+    }
+    
+    public function field_admin_email() {
+        $options = get_option('property_manager_options', array());
+        $value = isset($options['admin_email']) ? $options['admin_email'] : get_option('admin_email');
+        ?>
+        <input type="email" 
+               name="property_manager_options[admin_email]" 
+               value="<?php echo esc_attr($value); ?>" 
+               class="regular-text" />
+        <p class="description"><?php esc_html_e('Email address for receiving property inquiries.', 'property-manager-pro'); ?></p>
+        <?php
+    }
+    
+    public function field_email_verification() {
+        $options = get_option('property_manager_options', array());
+        $value = isset($options['email_verification_required']) ? $options['email_verification_required'] : 1;
+        ?>
+        <label>
+            <input type="checkbox" 
+                   name="property_manager_options[email_verification_required]" 
+                   value="1" 
+                   <?php checked($value, 1); ?> />
+            <?php esc_html_e('Require email verification before sending property alerts', 'property-manager-pro'); ?>
+        </label>
+        <?php
+    }
+    
+    public function field_enable_map() {
+        $options = get_option('property_manager_options', array());
+        $value = isset($options['enable_map']) ? $options['enable_map'] : 1;
+        ?>
+        <label>
+            <input type="checkbox" 
+                   name="property_manager_options[enable_map]" 
+                   value="1" 
+                   <?php checked($value, 1); ?> />
+            <?php esc_html_e('Enable map view for property search results', 'property-manager-pro'); ?>
+        </label>
+        <?php
+    }
+    
+    public function field_map_provider() {
+        $options = get_option('property_manager_options', array());
+        $value = isset($options['map_provider']) ? $options['map_provider'] : 'openstreetmap';
+        
+        $providers = array(
+            'openstreetmap' => __('OpenStreetMap (Free)', 'property-manager-pro'),
+            'mapbox' => __('Mapbox (API Key Required)', 'property-manager-pro')
+        );
+        ?>
+        <select name="property_manager_options[map_provider]" id="map_provider">
+            <?php foreach ($providers as $key => $label): ?>
+                <option value="<?php echo esc_attr($key); ?>" <?php selected($value, $key); ?>>
+                    <?php echo esc_html($label); ?>
+                </option>
+            <?php endforeach; ?>
+        </select>
+        <?php
+    }
+    
+    /**
+     * Handle admin actions (non-AJAX)
+     */
+    public function handle_admin_actions() {
+        // Only process on our admin pages
+        if (!isset($_GET['page']) || strpos($_GET['page'], 'property-manager') === false) {
+            return;
+        }
+        
+        // Check for bulk actions
+        if (isset($_POST['action']) && $_POST['action'] !== '-1') {
+            $this->handle_bulk_action();
+        }
+        
+        // Check for single actions
+        if (isset($_GET['action'])) {
+            $this->handle_single_action();
+        }
+    }
+    
+    /**
+     * Handle bulk actions
+     */
+    private function handle_bulk_action() {
+        // Verify nonce
+        if (!isset($_POST['_wpnonce']) || !wp_verify_nonce($_POST['_wpnonce'], 'bulk-properties')) {
+            wp_die(__('Security check failed.', 'property-manager-pro'));
+        }
+        
+        // Check capability
+        if (!current_user_can('manage_options')) {
+            wp_die(__('You do not have sufficient permissions.', 'property-manager-pro'));
+        }
+        
+        $action = sanitize_text_field($_POST['action']);
+        $ids = isset($_POST['property']) ? array_map('absint', $_POST['property']) : array();
+        
+        if (empty($ids)) {
+            $this->add_admin_notice('error', __('No items selected.', 'property-manager-pro'));
+            return;
+        }
+        
+        switch ($action) {
+            case 'delete':
+                $this->bulk_delete_properties($ids);
+                break;
+            case 'activate':
+                $this->bulk_update_status($ids, 'active');
+                break;
+            case 'deactivate':
+                $this->bulk_update_status($ids, 'inactive');
+                break;
+        }
+    }
+    
+    /**
+     * Handle single actions
+     */
+    private function handle_single_action() {
+        $action = sanitize_text_field($_GET['action']);
+        
+        // Actions that require nonce verification
+        $nonce_required_actions = array('delete', 'activate', 'deactivate');
+        
+        if (in_array($action, $nonce_required_actions)) {
+            if (!isset($_GET['_wpnonce']) || !wp_verify_nonce($_GET['_wpnonce'], 'property_action_' . $action)) {
+                wp_die(__('Security check failed.', 'property-manager-pro'));
+            }
+            
+            if (!current_user_can('manage_options')) {
+                wp_die(__('You do not have sufficient permissions.', 'property-manager-pro'));
+            }
+        }
+    }
+    
+    /**
+     * Bulk delete properties
+     */
+    private function bulk_delete_properties($ids) {
+        global $wpdb;
+        
+        $property_manager = PropertyManager_Property::get_instance();
+        $deleted_count = 0;
+        
+        foreach ($ids as $id) {
+            if ($property_manager->delete_property($id)) {
+                $deleted_count++;
+            }
+        }
+        
+        // Log action
+        $this->log_admin_action('bulk_delete_properties', array(
+            'count' => $deleted_count,
+            'ids' => $ids
+        ));
+        
+        $this->add_admin_notice('success', sprintf(
+            _n('%d property deleted.', '%d properties deleted.', $deleted_count, 'property-manager-pro'),
+            $deleted_count
+        ));
+    }
+    
+    /**
+     * Bulk update status
+     */
+    private function bulk_update_status($ids, $status) {
+        global $wpdb;
+        
+        $table = PropertyManager_Database::get_table_name('properties');
+        $updated_count = 0;
+        
+        foreach ($ids as $id) {
+            $result = $wpdb->update(
+                $table,
+                array('status' => $status, 'updated_at' => current_time('mysql')),
+                array('id' => $id),
+                array('%s', '%s'),
+                array('%d')
+            );
+            
+            if ($result !== false) {
+                $updated_count++;
+            }
+        }
+        
+        // Log action
+        $this->log_admin_action('bulk_update_status', array(
+            'status' => $status,
+            'count' => $updated_count,
+            'ids' => $ids
+        ));
+        
+        $this->add_admin_notice('success', sprintf(
+            _n('%d property updated.', '%d properties updated.', $updated_count, 'property-manager-pro'),
+            $updated_count
+        ));
+    }
+    
+    /**
+     * AJAX: Import feed
+     */
+    public function ajax_import_feed() {
+        // Security checks
+        check_ajax_referer('property_manager_admin_nonce', 'nonce');
+        
+        if (!current_user_can('manage_options')) {
+            wp_send_json_error(array('message' => __('Insufficient permissions.', 'property-manager-pro')));
+        }
+        
+        // Rate limiting
+        if (!$this->check_rate_limit('feed_import')) {
+            wp_send_json_error(array('message' => __('Please wait before starting another import.', 'property-manager-pro')));
+        }
+        
+        // Start import
+        $importer = PropertyManager_FeedImporter::get_instance();
+        $result = $importer->import();
+        
+        if ($result) {
+            // Log action
+            $this->log_admin_action('feed_import', array(
+                'imported' => $result['imported'],
+                'updated' => $result['updated'],
+                'failed' => $result['failed']
+            ));
+            
+            wp_send_json_success(array(
+                'message' => sprintf(
+                    __('Import completed: %d imported, %d updated, %d failed.', 'property-manager-pro'),
+                    $result['imported'],
+                    $result['updated'],
+                    $result['failed']
+                ),
+                'stats' => $result
+            ));
+        } else {
+            wp_send_json_error(array('message' => __('Import failed. Please check the error log.', 'property-manager-pro')));
+        }
+    }
+    
+    /**
+     * AJAX: Process images
+     */
+    public function ajax_process_images() {
+        // Security checks
+        check_ajax_referer('property_manager_admin_nonce', 'nonce');
+        
+        if (!current_user_can('manage_options')) {
+            wp_send_json_error(array('message' => __('Insufficient permissions.', 'property-manager-pro')));
+        }
+        
+        // Rate limiting
+        if (!$this->check_rate_limit('process_images')) {
+            wp_send_json_error(array('message' => __('Please wait before processing more images.', 'property-manager-pro')));
+        }
+        
+        $batch_size = isset($_POST['batch_size']) ? absint($_POST['batch_size']) : 10;
+        $batch_size = max(1, min(50, $batch_size)); // Limit between 1-50
+        
+        $image_downloader = PropertyManager_ImageDownloader::get_instance();
+        $processed = $image_downloader->process_pending_images($batch_size);
+        
+        // Log action
+        $this->log_admin_action('process_images', array('count' => $processed));
+        
+        wp_send_json_success(array(
+            'message' => sprintf(__('%d images processed.', 'property-manager-pro'), $processed),
+            'processed' => $processed
+        ));
+    }
+    
+    /**
+     * AJAX: Retry failed images
+     */
+    public function ajax_retry_failed_images() {
+        // Security checks
+        check_ajax_referer('property_manager_admin_nonce', 'nonce');
+        
+        if (!current_user_can('manage_options')) {
+            wp_send_json_error(array('message' => __('Insufficient permissions.', 'property-manager-pro')));
+        }
+        
+        // Rate limiting
+        if (!$this->check_rate_limit('retry_images')) {
+            wp_send_json_error(array('message' => __('Please wait before retrying images.', 'property-manager-pro')));
+        }
+        
+        $batch_size = isset($_POST['batch_size']) ? absint($_POST['batch_size']) : 20;
+        $batch_size = max(1, min(50, $batch_size));
+        
+        $image_downloader = PropertyManager_ImageDownloader::get_instance();
+        $retried = $image_downloader->retry_failed_downloads($batch_size);
+        
+        // Log action
+        $this->log_admin_action('retry_failed_images', array('count' => $retried));
+        
+        wp_send_json_success(array(
+            'message' => sprintf(__('%d failed images queued for retry.', 'property-manager-pro'), $retried),
+            'retried' => $retried
+        ));
+    }
+    
+    /**
+     * AJAX: Test email
+     */
+    public function ajax_test_email() {
+        // Security checks
+        check_ajax_referer('property_manager_admin_nonce', 'nonce');
+        
+        if (!current_user_can('manage_options')) {
+            wp_send_json_error(array('message' => __('Insufficient permissions.', 'property-manager-pro')));
+        }
+        
+        // Rate limiting
+        if (!$this->check_rate_limit('test_email')) {
+            wp_send_json_error(array('message' => __('Please wait before sending another test email.', 'property-manager-pro')));
+        }
+        
+        $email = isset($_POST['email']) ? sanitize_email($_POST['email']) : '';
+        
+        if (!is_email($email)) {
+            wp_send_json_error(array('message' => __('Invalid email address.', 'property-manager-pro')));
+        }
+        
+        $subject = sprintf(__('[%s] Test Email', 'property-manager-pro'), get_bloginfo('name'));
+        $message = __('This is a test email from Property Manager Pro. If you received this, your email configuration is working correctly.', 'property-manager-pro');
+        
+        $result = wp_mail($email, $subject, $message);
+        
+        // Log action
+        $this->log_admin_action('test_email', array('email' => $email, 'success' => $result));
+        
+        if ($result) {
+            wp_send_json_success(array('message' => __('Test email sent successfully!', 'property-manager-pro')));
+        } else {
+            wp_send_json_error(array('message' => __('Failed to send test email. Please check your email configuration.', 'property-manager-pro')));
+        }
+    }
+    
+    /**
+     * AJAX: Delete property
+     */
+    public function ajax_delete_property() {
+        // Security checks
+        check_ajax_referer('property_manager_admin_nonce', 'nonce');
+        
+        if (!current_user_can('manage_options')) {
+            wp_send_json_error(array('message' => __('Insufficient permissions.', 'property-manager-pro')));
+        }
+        
+        $property_id = isset($_POST['property_id']) ? absint($_POST['property_id']) : 0;
+        
+        if (!$property_id) {
+            wp_send_json_error(array('message' => __('Invalid property ID.', 'property-manager-pro')));
+        }
+        
+        $property_manager = PropertyManager_Property::get_instance();
+        $result = $property_manager->delete_property($property_id);
+        
+        if ($result) {
+            // Log action
+            $this->log_admin_action('delete_property', array('property_id' => $property_id));
+            
+            wp_send_json_success(array('message' => __('Property deleted successfully.', 'property-manager-pro')));
+        } else {
+            wp_send_json_error(array('message' => __('Failed to delete property.', 'property-manager-pro')));
+        }
+    }
+    
+    /**
+     * AJAX: Test feed URL
+     */
+    public function ajax_test_feed_url() {
+        // Security checks
+        check_ajax_referer('property_manager_admin_nonce', 'nonce');
+        
+        if (!current_user_can('manage_options')) {
+            wp_send_json_error(array('message' => __('Insufficient permissions.', 'property-manager-pro')));
+        }
+        
+        // Rate limiting
+        if (!$this->check_rate_limit('test_feed_url')) {
+            wp_send_json_error(array('message' => __('Please wait before testing the feed URL again.', 'property-manager-pro')));
+        }
+        
+        $feed_url = isset($_POST['feed_url']) ? esc_url_raw($_POST['feed_url'], array('http', 'https')) : '';
+        
+        if (empty($feed_url)) {
+            wp_send_json_error(array('message' => __('Please enter a feed URL.', 'property-manager-pro')));
+        }
+        
+        // Test the URL
+        $response = wp_remote_get($feed_url, array(
+            'timeout' => 30,
+            'redirection' => 5,
+            'sslverify' => true
+        ));
+        
+        if (is_wp_error($response)) {
+            wp_send_json_error(array('message' => sprintf(__('Error: %s', 'property-manager-pro'), $response->get_error_message())));
+        }
+        
+        $http_code = wp_remote_retrieve_response_code($response);
+        $body = wp_remote_retrieve_body($response);
+        
+        if ($http_code !== 200) {
+            wp_send_json_error(array('message' => sprintf(__('HTTP Error: %d', 'property-manager-pro'), $http_code)));
+        }
+        
+        if (empty($body)) {
+            wp_send_json_error(array('message' => __('Feed is empty.', 'property-manager-pro')));
+        }
+        
+        // Try to parse XML
+        libxml_use_internal_errors(true);
+        $xml = simplexml_load_string($body);
+        
+        if ($xml === false) {
+            $errors = libxml_get_errors();
+            $error_msg = !empty($errors) ? $errors[0]->message : __('Invalid XML format.', 'property-manager-pro');
+            libxml_clear_errors();
+            wp_send_json_error(array('message' => $error_msg));
+        }
+        
+        // Count properties
+        $property_count = 0;
+        if (isset($xml->property)) {
+            $property_count = count($xml->property);
+        }
+        
+        // Log action
+        $this->log_admin_action('test_feed_url', array('url' => $feed_url, 'success' => true));
+        
+        wp_send_json_success(array(
+            'message' => sprintf(__('Feed is valid! Found %d properties.', 'property-manager-pro'), $property_count),
+            'property_count' => $property_count
+        ));
+    }
+    
+    /**
+     * Check rate limit
+     */
+    private function check_rate_limit($action) {
+        $user_id = get_current_user_id();
+        $key = 'property_manager_rate_limit_' . $action . '_' . $user_id;
+        $attempts = get_transient($key);
+        
+        if ($attempts === false) {
+            set_transient($key, 1, $this->rate_limit_window);
+            return true;
+        }
+        
+        if ($attempts >= $this->rate_limit_attempts) {
+            return false;
+        }
+        
+        set_transient($key, $attempts + 1, $this->rate_limit_window);
+        return true;
+    }
+    
+    /**
+     * Log admin action
+     */
+    private function log_admin_action($action, $metadata = array()) {
+        global $wpdb;
+        
+        $table = PropertyManager_Database::get_table_name('admin_logs');
+        
+        // Check if table exists
+        if ($wpdb->get_var("SHOW TABLES LIKE '$table'") !== $table) {
+            return;
+        }
+        
+        $user_id = get_current_user_id();
+        $user = get_userdata($user_id);
+        
+        $wpdb->insert($table, array(
+            'user_id' => $user_id,
+            'username' => $user ? $user->user_login : 'unknown',
+            'action' => sanitize_text_field($action),
+            'metadata' => maybe_serialize($metadata),
+            'ip_address' => $this->get_client_ip(),
+            'user_agent' => $this->get_user_agent(),
+            'created_at' => current_time('mysql')
+        ), array('%d', '%s', '%s', '%s', '%s', '%s', '%s'));
+    }
+    
+    /**
+     * Get client IP
+     */
+    private function get_client_ip() {
+        $ip = '';
+        
+        if (!empty($_SERVER['HTTP_CLIENT_IP'])) {
+            $ip = $_SERVER['HTTP_CLIENT_IP'];
+        } elseif (!empty($_SERVER['HTTP_X_FORWARDED_FOR'])) {
+            $ip = $_SERVER['HTTP_X_FORWARDED_FOR'];
+        } else {
+            $ip = $_SERVER['REMOTE_ADDR'];
+        }
+        
+        return sanitize_text_field($ip);
+    }
+    
+    /**
+     * Get user agent
+     */
+    private function get_user_agent() {
+        return isset($_SERVER['HTTP_USER_AGENT']) ? sanitize_text_field($_SERVER['HTTP_USER_AGENT']) : '';
+    }
+    
+    /**
+     * Add admin notice
+     */
+    private function add_admin_notice($type, $message) {
+        $notices = get_transient('property_manager_admin_notices');
+        
+        if (!is_array($notices)) {
+            $notices = array();
+        }
+        
+        $notices[] = array(
+            'type' => $type,
+            'message' => $message
+        );
+        
+        set_transient('property_manager_admin_notices', $notices, 60);
+    }
+    
+    /**
+     * Display admin notices
+     */
+    public function display_admin_notices() {
+        $notices = get_transient('property_manager_admin_notices');
+        
+        if (!is_array($notices) || empty($notices)) {
+            return;
+        }
+        
+        foreach ($notices as $notice) {
+            $class = $notice['type'] === 'error' ? 'notice-error' : 'notice-success';
+            ?>
+            <div class="notice <?php echo esc_attr($class); ?> is-dismissible">
+                <p><?php echo esc_html($notice['message']); ?></p>
+            </div>
+            <?php
+        }
+        
+        delete_transient('property_manager_admin_notices');
+    }
+    
+    /**
+     * Admin page callbacks
+     */
+    public function dashboard_page() {
+        if (!current_user_can('manage_options')) {
+            wp_die(__('You do not have sufficient permissions to access this page.', 'property-manager-pro'));
+        }
+        
+        $dashboard = PropertyManager_Admin_Dashboard::get_instance();
+        $dashboard->render();
+    }
+    
+    public function properties_page() {
+        if (!current_user_can('manage_options')) {
+            wp_die(__('You do not have sufficient permissions to access this page.', 'property-manager-pro'));
+        }
+        
+        $properties = PropertyManager_Admin_Properties::get_instance();
+        $properties->render();
+    }
+    
+    public function images_page() {
+        if (!current_user_can('manage_options')) {
+            wp_die(__('You do not have sufficient permissions to access this page.', 'property-manager-pro'));
+        }
+        
+        $images = PropertyManager_Admin_Images::get_instance();
+        $images->render();
+    }
+    
+    public function import_page() {
+        if (!current_user_can('manage_options')) {
+            wp_die(__('You do not have sufficient permissions to access this page.', 'property-manager-pro'));
+        }
+        
+        $importer = PropertyManager_FeedImporter::get_instance();
+        $import_stats = $importer->get_import_stats(10);
+        
+        ?>
+        <div class="wrap">
+            <h1><?php esc_html_e('Import Feed', 'property-manager-pro'); ?></h1>
+            
+            <div class="card" style="max-width: 800px;">
+                <h2><?php esc_html_e('Manual Import', 'property-manager-pro'); ?></h2>
+                <p><?php esc_html_e('Click the button below to manually import properties from your Kyero feed.', 'property-manager-pro'); ?></p>
+                
+                <button type="button" class="button button-primary" id="start-import" data-nonce="<?php echo esc_attr(wp_create_nonce('property_manager_admin_nonce')); ?>">
+                    <span class="dashicons dashicons-download" style="margin-top: 3px;"></span>
+                    <?php esc_html_e('Start Import', 'property-manager-pro'); ?>
+                </button>
+                
+                <div id="import-progress" style="display: none; margin-top: 20px;">
+                    <div class="notice notice-info">
+                        <p><?php esc_html_e('Import in progress...', 'property-manager-pro'); ?></p>
+                    </div>
+                </div>
+                
+                <div id="import-result" style="margin-top: 20px;"></div>
+            </div>
+            
+            <?php if (!empty($import_stats)): ?>
+                <div class="card" style="max-width: 800px; margin-top: 20px;">
+                    <h2><?php esc_html_e('Recent Imports', 'property-manager-pro'); ?></h2>
+                    <table class="wp-list-table widefat fixed striped">
+                        <thead>
+                            <tr>
+                                <th><?php esc_html_e('Date', 'property-manager-pro'); ?></th>
+                                <th><?php esc_html_e('Status', 'property-manager-pro'); ?></th>
+                                <th><?php esc_html_e('Imported', 'property-manager-pro'); ?></th>
+                                <th><?php esc_html_e('Updated', 'property-manager-pro'); ?></th>
+                                <th><?php esc_html_e('Failed', 'property-manager-pro'); ?></th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <?php foreach ($import_stats as $stat): ?>
+                                <tr>
+                                    <td><?php echo esc_html(date_i18n(get_option('date_format') . ' ' . get_option('time_format'), strtotime($stat->started_at))); ?></td>
+                                    <td>
+                                        <span class="status-<?php echo esc_attr($stat->status); ?>">
+                                            <?php echo esc_html(ucfirst($stat->status)); ?>
+                                        </span>
+                                    </td>
+                                    <td><?php echo absint($stat->properties_imported); ?></td>
+                                    <td><?php echo absint($stat->properties_updated); ?></td>
+                                    <td><?php echo absint($stat->properties_failed); ?></td>
+                                </tr>
+                            <?php endforeach; ?>
+                        </tbody>
+                    </table>
+                </div>
+            <?php endif; ?>
+        </div>
+        
+        <script>
+        jQuery(document).ready(function($) {
+            $('#start-import').on('click', function() {
+                var btn = $(this);
+                var nonce = btn.data('nonce');
+                
+                if (!confirm('<?php echo esc_js(__('Start property import?', 'property-manager-pro')); ?>')) {
+                    return;
+                }
+                
+                btn.prop('disabled', true);
+                $('#import-progress').show();
+                $('#import-result').html('');
+                
+                $.ajax({
+                    url: ajaxurl,
+                    type: 'POST',
+                    data: {
+                        action: 'property_manager_import_feed',
+                        nonce: nonce
+                    },
+                    success: function(response) {
+                        if (response.success) {
+                            $('#import-result').html('<div class="notice notice-success"><p>' + response.data.message + '</p></div>');
+                        } else {
+                            $('#import-result').html('<div class="notice notice-error"><p>' + response.data.message + '</p></div>');
+                        }
+                    },
+                    error: function() {
+                        $('#import-result').html('<div class="notice notice-error"><p><?php echo esc_js(__('An error occurred.', 'property-manager-pro')); ?></p></div>');
+                    },
+                    complete: function() {
+                        btn.prop('disabled', false);
+                        $('#import-progress').hide();
+                    }
+                });
+            });
+        });
+        </script>
+        <?php
+    }
+    
+    public function alerts_page() {
+        if (!current_user_can('manage_options')) {
+            wp_die(__('You do not have sufficient permissions to access this page.', 'property-manager-pro'));
+        }
+        
+        $alerts = PropertyManager_Admin_Alerts::get_instance();
+        $alerts->render();
+    }
+    
+    public function inquiries_page() {
+        if (!current_user_can('manage_options')) {
+            wp_die(__('You do not have sufficient permissions to access this page.', 'property-manager-pro'));
+        }
+        
+        $inquiries = PropertyManager_Admin_Inquiries::get_instance();
+        $inquiries->render();
+    }
+    
+    public function settings_page() {
+        if (!current_user_can('manage_options')) {
+            wp_die(__('You do not have sufficient permissions to access this page.', 'property-manager-pro'));
+        }
+        
+        $settings = PropertyManager_Admin_Settings::get_instance();
+        $settings->render();
+    }
 }
