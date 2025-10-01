@@ -1,369 +1,583 @@
-var map, marker, ajax_nonce;
-jQuery(document).ready(function($) {
-    /*** Dashboard ***/
-    // Process pending images
-    $('#process-images-btn').click(function() {
-        var $btn = $(this);
-        $btn.prop('disabled', true).text('Processing...');
-                
-        $.post(ajaxurl, {
-            action: 'property_manager_process_images',
-            nonce: ajax_nonce
-        }, function(response) {
-            $btn.prop('disabled', false).text('Process Pending Images');
-            if (response.success) {
-                alert('Images processed ' + response.data.processed);
-                location.reload();
-            } else {
-                alert('Error: ' + response.data.message);
+/**
+ * Property Manager Pro - Admin JavaScript
+ * 
+ * Handles all admin-side interactions including AJAX requests,
+ * form validations, and UI enhancements.
+ * 
+ * @package PropertyManagerPro
+ * @version 1.0.1
+ */
+
+(function ($) {
+    'use strict';
+
+    // Admin object
+    const PropertyManagerAdmin = {
+
+        /**
+         * Initialize
+         */
+        init: function () {
+            this.bindEvents();
+            this.initComponents();
+        },
+
+        /**
+         * Bind all event handlers
+         */
+        bindEvents: function () {
+            // Dashboard
+            $(document).on('click', '#process-images-btn', this.processImages);
+            $(document).on('click', '#retry-failed-images-btn', this.retryFailedImages);
+
+            // Import
+            $(document).on('click', '#manual-import-btn', this.startImport);
+            $(document).on('click', '#test-feed-url', this.testFeedUrl);
+
+            // Settings
+            $(document).on('click', '#test-email-settings', this.testEmail);
+
+            // Properties
+            $(document).on('click', '.delete-property', this.confirmDelete);
+            $(document).on('change', '#cb-select-all-1', this.selectAllCheckboxes);
+
+            // Images
+            $(document).on('click', '.retry-image', this.retrySingleImage);
+            $(document).on('click', '.delete-image', this.deleteSingleImage);
+
+            // Form validation
+            $(document).on('submit', 'form[data-validate]', this.validateForm);
+        },
+
+        /**
+         * Initialize components
+         */
+        initComponents: function () {
+            // Initialize tooltips if available
+            if (typeof $.fn.tooltip === 'function') {
+                $('[data-toggle="tooltip"]').tooltip();
             }
-        });
-    });
-            
-    // Retry failed images
-    $('#retry-failed-images-btn').click(function() {
-        var $btn = $(this);
-        $btn.prop('disabled', true).text('Retrying...');
-                
-        $.post(ajaxurl, {
-            action: 'property_manager_retry_failed_images',
-            nonce: ajax_nonce
-        }, function(response) {
-            $btn.prop('disabled', false).text('Retry Failed Image');
-            if (response.success) {
-                alert('Failed images queued for retry: ' + response.data.retried);
-                location.reload();
-            } else {
-                alert('Error: ' + response.data.message);
-            }
-        });
-    });
 
-    /*** Feed Import ***/
-    $('#manual-import-btn').click(function() {
-        var $btn = $(this);
-        var $progress = $('#import-progress');
-        var $results = $('#import-results');
-                    
-        $btn.prop('disabled', true);
-        $progress.show();
-        $results.hide();
-                    
-        $.ajax({
-            url: ajaxurl,
-            type: 'POST',
-            data: {
-                action: 'property_manager_import_feed',
-                nonce: ajax_nonce
-            },
-            success: function(response) {
-                $progress.hide();
-                $btn.prop('disabled', false);
-                            
-                if (response.success) {
-                    $results.html('<div class="notice notice-success"><p>' + response.data.message + '</p></div>').show();
-                } else {
-                    $results.html('<div class="notice notice-error"><p>' + response.data.message + '</p></div>').show();
-                }
-            },
-            error: function() {
-                $progress.hide();
-                $btn.prop('disabled', false);
-                $results.html('<div class="notice notice-error"><p>Import failed. Please try again.</p></div>').show();
-            }
-        });
-    });
+            // Auto-dismiss notices after 5 seconds
+            setTimeout(function () {
+                $('.notice.is-dismissible').fadeOut();
+            }, 5000);
 
-    /*** Enquiries ***/
-    $('.show-full-message').click(function(e) {
-        e.preventDefault();
-        $(this).hide().siblings('.full-message').show();
-    });
+            // Confirm before leaving page with unsaved changes
+            this.trackFormChanges();
+        },
 
-    /*** Properties ***/
-    $('#cb-select-all-1').change(function() {
-        $('input[name="properties[]"]').prop('checked', this.checked);
-    });
-
-
-    
-            
-    // Search address functionality
-    $('#search_address_btn').click(function() {
-        var address = $('#address_search').val();
-        if (!address) {
-            alert('Please enter an address to search');
-            return;
-        }
-        $btn = $(this);
-        $btn.attr("disabled", "disabled");
-
-        // Geocode address using Nominatim
-        $.ajax({
-            url: 'https://nominatim.openstreetmap.org/search',
-            data: {
-                format: 'json',
-                q: address,
-                limit: 1,
-                addressdetails: 1
-            },
-            success: function(data) {
-                $btn.removeAttr("disabled");
-                if (data && data.length > 0) {
-                    var result = data[0];
-                    var lat = parseFloat(result.lat);
-                    var lng = parseFloat(result.lon);
-                            
-                    // Center map on result
-                    map.setView([lat, lng], 15);
-                            
-                    // Remove existing marker
-                    if (marker) {
-                        map.removeLayer(marker);
-                    }
-                            
-                    // Add new marker
-                    marker = L.marker([lat, lng], {
-                        draggable: true
-                    }).addTo(map);
-                            
-                    // Handle marker drag
-                    marker.on('dragend', function(e) {
-                        var position = marker.getLatLng();
-                        updateLocation(position.lat, position.lng);
-                    });
-                            
-                    // Update location
-                    updateLocation(lat, lng);
-                            
-                    // Clear search field
-                    $('#address_search').val('');
-                } else {
-                    alert('Address not found. Please try a different search term.');
-                }
-            },
-            error: function() {
-                $btn.removeAttr("disabled");
-                alert('Search failed. Please try again.');
-            }
-        });
-    });
-            
-    
-    // Allow Enter key for address search
-    $('#address_search').keypress(function(e) {
-        if (e.which === 13) {
+        /**
+         * Process pending images
+         */
+        processImages: function (e) {
             e.preventDefault();
-            $('#search_address_btn').click();
-        }
-    });
-            
-    // Manual coordinates toggle
-    $('#manual_coordinates').click(function() {
-        var $lat = $('#latitude');
-        var $lng = $('#longitude');
-        var $town = $('#town');
-        var $province = $('#province');
-        var $location = $('#location_detail');
-                
-        if ($lat.prop('readonly')) {
-            // Enable manual entry
-            $lat.prop('readonly', false);
-            $lng.prop('readonly', false);
-            $town.prop('readonly', false);
-            $province.prop('readonly', false);
-            $location.prop('readonly', false);
-            $(this).text('Use Map');
-        } else {
-            // Disable manual entry
-            $lat.prop('readonly', true);
-            $lng.prop('readonly', true);
-            $town.prop('readonly', true);
-            $province.prop('readonly', true);
-            $location.prop('readonly', true);
-            $(this).text('Manual Entry');
-                    
-            // Update map if coordinates changed
-            var lat = parseFloat($lat.val());
-            var lng = parseFloat($lng.val());
-            if (!isNaN(lat) && !isNaN(lng)) {
-                map.setView([lat, lng], 15);
-                        
-                if (marker) {
-                    map.removeLayer(marker);
-                }
-                        
-                marker = L.marker([lat, lng], {
-                    draggable: true
-                }).addTo(map);
-                        
-                marker.on('dragend', function(e) {
-                    var position = marker.getLatLng();
-                    updateLocation(position.lat, position.lng);
-                });
+
+            const $btn = $(this);
+            const $result = $('#image-action-result');
+            const batchSize = $('#batch-size').val() || 10;
+
+            if (!confirm(propertyManagerAdmin.strings.confirmImport)) {
+                return;
             }
-        }
-    });
-            
-    // Description tabs
-    $('.tab-button').click(function() {
-        var tab = $(this).data('tab');
-                
-        $('.tab-button').removeClass('active');
-        $(this).addClass('active');
-                
-        $('.tab-pane').removeClass('active');
-        $('#desc-' + tab).addClass('active');
-    });
-            
-    // Add feature
-    var featureIndex = $('.feature-item').length;
-    $('#add-feature').click(function() {
-        var html = '<div class="feature-item">' +
-            '<input type="text" name="features[' + featureIndex + ']" value="" class="widefat" />' +
-            '<button type="button" class="button remove-feature">Remove</button>' +
-            '</div>';
-        $('#property-features').append(html);
-        featureIndex++;
-    });
-            
-    // Remove feature
-    $(document).on('click', '.remove-feature', function() {
-        $(this).closest('.feature-item').remove();
-    });
-            
-    // Add image
-    var imageIndex = $('.image-item').length;
-    $('#add-image').click(function() {
-        var frame = wp.media({
-            title: 'Select Property Image',
-            multiple: false,
-            library: { type: 'image' },
-            button: { text: 'Use this image' }
-        });
-                
-        frame.on('select', function() {
-            var attachment = frame.state().get('selection').first().toJSON();
-            var html = '<div class="image-item" data-index="' + imageIndex + '">' +
-                '<img src="' + attachment.url + '" alt="" style="max-width: 100px; height: auto;" />' +
-                '<input type="hidden" name="property_images[' + imageIndex + '][url]" value="' + attachment.url + '" />' +
-                '<input type="text" name="property_images[' + imageIndex + '][title]" value="' + (attachment.title || '') + '" placeholder="Image title" class="widefat" />' +
-                '<input type="text" name="property_images[' + imageIndex + '][alt]" value="' + (attachment.alt || '') + '" placeholder="Alt text" class="widefat" />' +
-                '<button type="button" class="button remove-image">Remove</button>' +
-                '</div>';
-            $('#property-images').append(html);
-            imageIndex++;
-        });
-                
-        frame.open();
-    });
-            
-    // Remove image
-    $(document).on('click', '.remove-image', function() {
-        $(this).closest('.image-item').remove();
-    });
-            
-    // Make images sortable
-    $('#property-images').sortable({
-        handle: 'img',
-        cursor: 'move',
-        update: function() {
-            // Update input names to maintain order
-            $('#property-images .image-item').each(function(index) {
-                $(this).find('input').each(function() {
-                    var name = $(this).attr('name');
-                    if (name) {
-                        var newName = name.replace(/\[\d+\]/, '[' + index + ']');
-                        $(this).attr('name', newName);
+
+            $btn.prop('disabled', true)
+                .html('<span class="dashicons dashicons-update spin"></span> ' + propertyManagerAdmin.strings.processing);
+            $result.html('');
+
+            $.ajax({
+                url: propertyManagerAdmin.ajaxUrl,
+                type: 'POST',
+                data: {
+                    action: 'property_manager_process_images',
+                    nonce: propertyManagerAdmin.nonce,
+                    batch_size: batchSize
+                },
+                timeout: 120000, // 2 minutes
+                success: function (response) {
+                    if (response.success) {
+                        $result.html('<div class="notice notice-success inline"><p>' +
+                            response.data.message + '</p></div>');
+
+                        // Reload after 2 seconds to update stats
+                        setTimeout(function () {
+                            location.reload();
+                        }, 2000);
+                    } else {
+                        $result.html('<div class="notice notice-error inline"><p>' +
+                            response.data.message + '</p></div>');
+                        PropertyManagerAdmin.resetButton($btn, 'Process Images');
                     }
-                });
+                },
+                error: function (xhr, status) {
+                    let errorMsg = propertyManagerAdmin.strings.error;
+                    if (status === 'timeout') {
+                        errorMsg = 'Request timed out. Images may still be processing in the background.';
+                    }
+                    $result.html('<div class="notice notice-error inline"><p>' + errorMsg + '</p></div>');
+                    PropertyManagerAdmin.resetButton($btn, 'Process Images');
+                }
+            });
+        },
+
+        /**
+         * Retry failed image downloads
+         */
+        retryFailedImages: function (e) {
+            e.preventDefault();
+
+            const $btn = $(this);
+            const $result = $('#image-action-result');
+
+            $btn.prop('disabled', true)
+                .html('<span class="dashicons dashicons-update spin"></span> ' + propertyManagerAdmin.strings.processing);
+            $result.html('');
+
+            $.ajax({
+                url: propertyManagerAdmin.ajaxUrl,
+                type: 'POST',
+                data: {
+                    action: 'property_manager_retry_failed_images',
+                    nonce: propertyManagerAdmin.nonce,
+                    batch_size: 10
+                },
+                success: function (response) {
+                    if (response.success) {
+                        $result.html('<div class="notice notice-success inline"><p>' +
+                            response.data.message + '</p></div>');
+
+                        setTimeout(function () {
+                            location.reload();
+                        }, 2000);
+                    } else {
+                        $result.html('<div class="notice notice-error inline"><p>' +
+                            response.data.message + '</p></div>');
+                        PropertyManagerAdmin.resetButton($btn, 'Retry Failed Images');
+                    }
+                },
+                error: function () {
+                    $result.html('<div class="notice notice-error inline"><p>' +
+                        propertyManagerAdmin.strings.error + '</p></div>');
+                    PropertyManagerAdmin.resetButton($btn, 'Retry Failed Images');
+                }
+            });
+        },
+
+        /**
+         * Start feed import
+         */
+        startImport: function (e) {
+            e.preventDefault();
+
+            const $btn = $(this);
+            const $progress = $('#import-progress');
+            const $results = $('#import-results');
+
+            if (!confirm(propertyManagerAdmin.strings.confirmImport)) {
+                return;
+            }
+
+            $btn.prop('disabled', true)
+                .html('<span class="dashicons dashicons-update spin"></span> ' + propertyManagerAdmin.strings.processing);
+            $progress.show();
+            $results.hide().removeClass('success error');
+
+            // Animate progress bar
+            PropertyManagerAdmin.animateProgressBar();
+
+            $.ajax({
+                url: propertyManagerAdmin.ajaxUrl,
+                type: 'POST',
+                data: {
+                    action: 'property_manager_import_feed',
+                    nonce: propertyManagerAdmin.nonce
+                },
+                timeout: 300000, // 5 minutes
+                success: function (response) {
+                    $progress.hide();
+
+                    if (response.success) {
+                        PropertyManagerAdmin.showImportResults(response.data, 'success');
+
+                        // Reload after 3 seconds
+                        setTimeout(function () {
+                            location.reload();
+                        }, 3000);
+                    } else {
+                        PropertyManagerAdmin.showImportResults(response.data, 'error');
+                        PropertyManagerAdmin.resetButton($btn, 'Start Import');
+                    }
+                },
+                error: function (xhr, status) {
+                    $progress.hide();
+
+                    let errorMsg = propertyManagerAdmin.strings.error;
+                    if (status === 'timeout') {
+                        errorMsg = 'Import timed out. The process may still be running in the background.';
+                    }
+
+                    PropertyManagerAdmin.showImportResults({ message: errorMsg }, 'error');
+                    PropertyManagerAdmin.resetButton($btn, 'Start Import');
+                }
+            });
+        },
+
+        /**
+         * Test feed URL
+         */
+        testFeedUrl: function (e) {
+            e.preventDefault();
+
+            const $btn = $(this);
+            const feedUrl = $('#feed_url').val();
+            const $result = $('#feed-url-test-result');
+
+            if (!feedUrl) {
+                $result.html('<div class="notice notice-error inline"><p>Please enter a feed URL first.</p></div>');
+                return;
+            }
+
+            $btn.prop('disabled', true).text('Testing...');
+            $result.html('<p>Testing feed URL...</p>');
+
+            $.ajax({
+                url: propertyManagerAdmin.ajaxUrl,
+                type: 'POST',
+                data: {
+                    action: 'property_manager_test_feed_url',
+                    nonce: propertyManagerAdmin.nonce,
+                    feed_url: feedUrl
+                },
+                timeout: 30000,
+                success: function (response) {
+                    if (response.success) {
+                        $result.html('<div class="notice notice-success inline"><p>' +
+                            response.data.message + '</p></div>');
+                    } else {
+                        $result.html('<div class="notice notice-error inline"><p>' +
+                            response.data.message + '</p></div>');
+                    }
+                },
+                error: function (xhr, status) {
+                    let errorMsg = 'Error testing feed URL.';
+                    if (status === 'timeout') {
+                        errorMsg = 'Request timed out. The feed URL may be slow to respond.';
+                    }
+                    $result.html('<div class="notice notice-error inline"><p>' + errorMsg + '</p></div>');
+                },
+                complete: function () {
+                    $btn.prop('disabled', false).text('Test URL');
+                }
+            });
+        },
+
+        /**
+         * Send test email
+         */
+        testEmail: function (e) {
+            e.preventDefault();
+
+            const $btn = $(this);
+            const email = $('#admin_email').val() || propertyManagerAdmin.adminEmail;
+
+            if (!confirm('Send a test email to ' + email + '?')) {
+                return;
+            }
+
+            $btn.prop('disabled', true).text('Sending...');
+
+            $.ajax({
+                url: propertyManagerAdmin.ajaxUrl,
+                type: 'POST',
+                data: {
+                    action: 'property_manager_test_email',
+                    nonce: propertyManagerAdmin.nonce,
+                    email: email
+                },
+                success: function (response) {
+                    if (response.success) {
+                        alert(response.data.message);
+                    } else {
+                        alert('Error: ' + response.data.message);
+                    }
+                },
+                error: function () {
+                    alert(propertyManagerAdmin.strings.error);
+                },
+                complete: function () {
+                    $btn.prop('disabled', false).text('Send Test Email');
+                }
+            });
+        },
+
+        /**
+         * Confirm delete action
+         */
+        confirmDelete: function (e) {
+            if (!confirm(propertyManagerAdmin.strings.confirmDelete)) {
+                e.preventDefault();
+                return false;
+            }
+        },
+
+        /**
+         * Select all checkboxes
+         */
+        selectAllCheckboxes: function () {
+            const isChecked = $(this).prop('checked');
+            $(this).closest('table').find('tbody input[type="checkbox"]').prop('checked', isChecked);
+        },
+
+        /**
+         * Retry single image download
+         */
+        retrySingleImage: function (e) {
+            e.preventDefault();
+
+            const $btn = $(this);
+            const imageId = $btn.data('image-id');
+
+            $btn.prop('disabled', true).text('Retrying...');
+
+            $.ajax({
+                url: propertyManagerAdmin.ajaxUrl,
+                type: 'POST',
+                data: {
+                    action: 'property_manager_retry_single_image',
+                    nonce: propertyManagerAdmin.nonce,
+                    image_id: imageId
+                },
+                success: function (response) {
+                    if (response.success) {
+                        alert(response.data.message);
+                        location.reload();
+                    } else {
+                        alert('Error: ' + response.data.message);
+                        $btn.prop('disabled', false).text('Retry');
+                    }
+                },
+                error: function () {
+                    alert(propertyManagerAdmin.strings.error);
+                    $btn.prop('disabled', false).text('Retry');
+                }
+            });
+        },
+
+        /**
+         * Delete single image
+         */
+        deleteSingleImage: function (e) {
+            e.preventDefault();
+
+            if (!confirm('Are you sure you want to delete this image?')) {
+                return;
+            }
+
+            const $btn = $(this);
+            const imageId = $btn.data('image-id');
+
+            $btn.prop('disabled', true);
+
+            $.ajax({
+                url: propertyManagerAdmin.ajaxUrl,
+                type: 'POST',
+                data: {
+                    action: 'property_manager_delete_image',
+                    nonce: propertyManagerAdmin.nonce,
+                    image_id: imageId
+                },
+                success: function (response) {
+                    if (response.success) {
+                        $btn.closest('tr').fadeOut(function () {
+                            $(this).remove();
+                        });
+                    } else {
+                        alert('Error: ' + response.data.message);
+                        $btn.prop('disabled', false);
+                    }
+                },
+                error: function () {
+                    alert(propertyManagerAdmin.strings.error);
+                    $btn.prop('disabled', false);
+                }
+            });
+        },
+
+        /**
+         * Validate form before submission
+         */
+        validateForm: function (e) {
+            const $form = $(this);
+            let isValid = true;
+            let errors = [];
+
+            // Check required fields
+            $form.find('[required]').each(function () {
+                const $field = $(this);
+                if (!$field.val()) {
+                    isValid = false;
+                    errors.push($field.attr('name') + ' is required');
+                    $field.addClass('error');
+                } else {
+                    $field.removeClass('error');
+                }
+            });
+
+            // Check email fields
+            $form.find('input[type="email"]').each(function () {
+                const $field = $(this);
+                const email = $field.val();
+                if (email && !PropertyManagerAdmin.isValidEmail(email)) {
+                    isValid = false;
+                    errors.push('Invalid email address: ' + email);
+                    $field.addClass('error');
+                }
+            });
+
+            // Check URL fields
+            $form.find('input[type="url"]').each(function () {
+                const $field = $(this);
+                const url = $field.val();
+                if (url && !PropertyManagerAdmin.isValidUrl(url)) {
+                    isValid = false;
+                    errors.push('Invalid URL: ' + url);
+                    $field.addClass('error');
+                }
+            });
+
+            if (!isValid) {
+                e.preventDefault();
+                alert('Please fix the following errors:\n\n' + errors.join('\n'));
+                return false;
+            }
+        },
+
+        /**
+         * Track form changes
+         */
+        trackFormChanges: function () {
+            let formChanged = false;
+
+            $('form').on('change input', 'input, select, textarea', function () {
+                formChanged = true;
+            });
+
+            $(window).on('beforeunload', function () {
+                if (formChanged) {
+                    return 'You have unsaved changes. Are you sure you want to leave?';
+                }
+            });
+
+            $('form').on('submit', function () {
+                formChanged = false;
+            });
+        },
+
+        /**
+         * Show import results
+         */
+        showImportResults: function (data, type) {
+            const $results = $('#import-results');
+            let html = '<div class="import-results-box">';
+
+            if (type === 'success') {
+                html += '<h3><span class="dashicons dashicons-yes-alt"></span> Import Completed</h3>';
+
+                if (data.imported !== undefined) {
+                    html += '<div class="import-stats">';
+                    html += '<div class="stat-item"><span class="number">' + data.imported + '</span><span class="label">Imported</span></div>';
+                    html += '<div class="stat-item"><span class="number">' + data.updated + '</span><span class="label">Updated</span></div>';
+                    if (data.failed > 0) {
+                        html += '<div class="stat-item error"><span class="number">' + data.failed + '</span><span class="label">Failed</span></div>';
+                    }
+                    html += '</div>';
+                } else {
+                    html += '<p>' + data.message + '</p>';
+                }
+            } else {
+                html += '<h3><span class="dashicons dashicons-warning"></span> Import Failed</h3>';
+                html += '<p class="error-message">' + PropertyManagerAdmin.escapeHtml(data.message) + '</p>';
+                html += '<p class="description">Please check your feed URL and server error logs.</p>';
+            }
+
+            html += '</div>';
+
+            $results.html(html).addClass(type).show();
+        },
+
+        /**
+         * Animate progress bar
+         */
+        animateProgressBar: function () {
+            const $progressFill = $('.progress-fill');
+            const $progressText = $('.progress-text');
+
+            let progress = 0;
+            const interval = setInterval(function () {
+                progress += Math.random() * 10;
+                if (progress > 90) {
+                    progress = 90;
+                    clearInterval(interval);
+                }
+                $progressFill.css('width', progress + '%');
+                $progressText.text('Processing... ' + Math.round(progress) + '%');
+            }, 500);
+        },
+
+        /**
+         * Reset button state
+         */
+        resetButton: function ($btn, text) {
+            $btn.prop('disabled', false)
+                .html(text);
+        },
+
+        /**
+         * Validate email
+         */
+        isValidEmail: function (email) {
+            const regex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+            return regex.test(email);
+        },
+
+        /**
+         * Validate URL
+         */
+        isValidUrl: function (url) {
+            try {
+                new URL(url);
+                return true;
+            } catch (e) {
+                return false;
+            }
+        },
+
+        /**
+         * Escape HTML to prevent XSS
+         */
+        escapeHtml: function (text) {
+            const map = {
+                '&': '&amp;',
+                '<': '&lt;',
+                '>': '&gt;',
+                '"': '&quot;',
+                "'": '&#039;'
+            };
+            return String(text).replace(/[&<>"']/g, function (m) {
+                return map[m];
             });
         }
-    });
-});
+    };
 
+    // Initialize when document is ready
+    $(document).ready(function () {
+        PropertyManagerAdmin.init();
+    });
 
-function initMap(initialLat, initialLng) {
-    // Initialize Leaflet map
-    map = L.map('property_location_map').setView([initialLat, initialLng], 15);
-                
-    // Add OpenStreetMap tiles
-    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-        attribution: '&copy; OpenStreetMap contributors'
-    }).addTo(map);
-                
-    // Add marker if coordinates exist
-    if (initialLat !== 37.8836 || initialLng !== -4.3242) {
-        marker = L.marker([initialLat, initialLng], {
-            draggable: true
-        }).addTo(map);
-                    
-        // Handle marker drag
-        marker.on('dragend', function(e) {
-            var position = marker.getLatLng();
-            updateLocation(position.lat, position.lng);
-        });
-    }
-                
-    // Handle map clicks
-    map.on('click', function(e) {
-        var lat = e.latlng.lat;
-        var lng = e.latlng.lng;
-                    
-        // Remove existing marker
-        if (marker) {
-            map.removeLayer(marker);
-        }
-                    
-        // Add new marker
-        marker = L.marker([lat, lng], {
-            draggable: true
-        }).addTo(map);
-                    
-        // Handle marker drag
-        marker.on('dragend', function(e) {
-            var position = marker.getLatLng();
-            updateLocation(position.lat, position.lng);
-        });
-                    
-        // Update location
-        updateLocation(lat, lng);
-    });
-}
-            
-// Update location fields with reverse geocoding
-function updateLocation(lat, lng) {
-    // Update coordinate fields
-    jQuery('#latitude').val(lat.toFixed(8));
-    jQuery('#longitude').val(lng.toFixed(8));
-                
-    // Reverse geocoding using Nominatim (OpenStreetMap)
-    jQuery.ajax({
-        url: 'https://nominatim.openstreetmap.org/reverse',
-        data: {
-            format: 'json',
-            lat: lat,
-            lon: lng,
-            addressdetails: 1,
-            accept_language: 'en'
-        },
-        success: function(data) {
-            if (data && data.address) {
-                var address = data.address;
-                            
-                // Extract location components
-                var town = address.city || address.town || address.village || address.municipality || '';
-                var province = address.state || address.province || address.county || '';
-                var fullAddress = data.display_name || '';
-                            
-                // Update fields
-                jQuery('#town').val(town);
-                jQuery('#province').val(province);
-                jQuery('#location_detail').val(fullAddress);
-            }
-        },
-        error: function() {
-            console.log('Geocoding failed');
-        }
-    });
-}
+    // Add spin animation for dashicons
+    $('<style>')
+        .text('.dashicons.spin { animation: spin 1s linear infinite; } ' +
+            '@keyframes spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }')
+        .appendTo('head');
+
+})(jQuery);
