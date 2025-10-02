@@ -43,6 +43,7 @@ class PropertyManager_Admin {
         add_action('wp_ajax_property_manager_import_feed', array($this, 'ajax_import_feed'));
         add_action('wp_ajax_property_manager_process_images', array($this, 'ajax_process_images'));
         add_action('wp_ajax_property_manager_retry_failed_images', array($this, 'ajax_retry_failed_images'));
+        add_action('wp_ajax_property_manager_clear_dashboard_cache', array($this, 'ajax_clear_dashboard_cache'));
         add_action('wp_ajax_property_manager_test_email', array($this, 'ajax_test_email'));
         add_action('wp_ajax_property_manager_delete_property', array($this, 'ajax_delete_property'));
         add_action('wp_ajax_property_manager_test_feed_url', array($this, 'ajax_test_feed_url'));
@@ -52,6 +53,7 @@ class PropertyManager_Admin {
         
         // Load admin page classes
         $this->load_admin_pages();
+        $this->init_components();
     }
     
     /**
@@ -60,10 +62,21 @@ class PropertyManager_Admin {
     private function load_admin_pages() {
         require_once PROPERTY_MANAGER_PLUGIN_PATH . 'admin/pages/class-dashboard.php';
         require_once PROPERTY_MANAGER_PLUGIN_PATH . 'admin/pages/class-properties.php';
+        require_once PROPERTY_MANAGER_PLUGIN_PATH . 'admin/pages/class-property-edit.php';
         require_once PROPERTY_MANAGER_PLUGIN_PATH . 'admin/pages/class-images.php';
         require_once PROPERTY_MANAGER_PLUGIN_PATH . 'admin/pages/class-alerts.php';
         require_once PROPERTY_MANAGER_PLUGIN_PATH . 'admin/pages/class-inquiries.php';
         require_once PROPERTY_MANAGER_PLUGIN_PATH . 'admin/pages/class-settings.php';
+    }
+
+    private function init_components() {
+        PropertyManager_Admin_Dashboard::get_instance();
+        PropertyManager_Admin_Properties::get_instance();
+        PropertyManager_Admin_Property_Edit::get_instance();
+        PropertyManager_Admin_Images::get_instance();
+        PropertyManager_Admin_Alerts::get_instance();
+        PropertyManager_Admin_Inquiries::get_instance();
+        PropertyManager_Admin_Settings::get_instance();
     }
     
     /**
@@ -101,6 +114,16 @@ class PropertyManager_Admin {
             array($this, 'properties_page')
         );
         
+         // Add New Property (links to edit page with no ID)
+        add_submenu_page(
+            'property-manager',
+            __('Add New Property', 'property-manager-pro'),
+            __('Add New Property', 'property-manager-pro'),
+            'manage_options',
+            'property-manager-edit',
+            array($this, 'edit_property_page')
+        );
+
         // Image Management
         add_submenu_page(
             'property-manager',
@@ -190,6 +213,19 @@ class PropertyManager_Admin {
                 'error' => __('An error occurred. Please try again.', 'property-manager-pro')
             )
         ));
+
+        // Page-specific assets
+        if ($hook === 'properties_page_property-manager-edit') {
+            // WordPress media uploader
+            wp_enqueue_media();
+            
+            // jQuery UI for sortable
+            wp_enqueue_script('jquery-ui-sortable');
+            
+            // Leaflet for maps
+            wp_enqueue_style('leaflet', 'https://unpkg.com/leaflet@1.9.4/dist/leaflet.css', array(), '1.9.4');
+            wp_enqueue_script('leaflet', 'https://unpkg.com/leaflet@1.9.4/dist/leaflet.js', array(), '1.9.4', true);
+        }
     }
     
     /**
@@ -576,7 +612,7 @@ class PropertyManager_Admin {
      */
     public function handle_admin_actions() {
         // Only process on our admin pages
-        if (!isset($_GET['page']) || strpos($_GET['page'], 'property-manager') === false) {
+        if (!isset($_GET['page']) || strpos($_GET['page'], 'property-manager-properties') === false) {
             return;
         }
         
@@ -631,6 +667,7 @@ class PropertyManager_Admin {
      */
     private function handle_single_action() {
         $action = sanitize_text_field($_GET['action']);
+        $property_id = intval(sanitize_text_field($_GET['property_id']));
         
         // Actions that require nonce verification
         $nonce_required_actions = array('delete', 'activate', 'deactivate');
@@ -644,6 +681,16 @@ class PropertyManager_Admin {
                 wp_die(__('You do not have sufficient permissions.', 'property-manager-pro'));
             }
         }
+
+        $this->bulk_delete_properties([$property_id]);
+        wp_redirect(add_query_arg(
+            array(
+                'page' => 'property-manager-properties',
+                'message' => 'deleted'
+            ),
+            admin_url('admin.php')
+        ));
+        exit;
     }
     
     /**
@@ -652,11 +699,11 @@ class PropertyManager_Admin {
     private function bulk_delete_properties($ids) {
         global $wpdb;
         
-        $property_manager = PropertyManager_Property::get_instance();
+        $db_manager = PropertyManager_Database::get_instance();
         $deleted_count = 0;
         
         foreach ($ids as $id) {
-            if ($property_manager->delete_property($id)) {
+            if ($db_manager->delete_property($id)) {
                 $deleted_count++;
             }
         }
@@ -811,6 +858,23 @@ class PropertyManager_Admin {
             'message' => sprintf(__('%d failed images queued for retry.', 'property-manager-pro'), $retried),
             'retried' => $retried
         ));
+    }
+    
+    
+    /**
+     * AJAX: Clear dashboard stats cache
+     */
+    public function ajax_clear_dashboard_cache() {
+        // Security checks
+        check_ajax_referer('property_manager_admin_nonce', 'nonce');
+        
+        if (!current_user_can('manage_options')) {
+            wp_send_json_error(array('message' => __('Insufficient permissions.', 'property-manager-pro')));
+        }
+        
+        delete_transient('property_manager_dashboard_stats');
+        
+        wp_send_json_success(array('message' => __('Cache cleared successfully!', 'property-manager-pro')));
     }
     
     /**
@@ -1081,6 +1145,15 @@ class PropertyManager_Admin {
         
         $properties = PropertyManager_Admin_Properties::get_instance();
         $properties->render();
+    }
+
+    public function edit_property_page() {
+        if (!current_user_can('manage_options')) {
+            wp_die(__('You do not have sufficient permissions to access this page.', 'property-manager-pro'));
+        }
+        
+        $edit_page = PropertyManager_Admin_Property_Edit::get_instance();
+        $edit_page->render();
     }
     
     public function images_page() {

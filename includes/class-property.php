@@ -47,40 +47,40 @@ class PropertyManager_Property {
     
         try {
             // Total properties
-            $total = $wpdb->get_var("SELECT COUNT(*) FROM $table");
+            $total = $wpdb->get_var($wpdb->prepare("SELECT COUNT(*) FROM %1s", $table));
             $total = $total !== null ? absint($total) : 0;
         
             // Active properties
             $active = $wpdb->get_var($wpdb->prepare(
-                "SELECT COUNT(*) FROM $table WHERE status = %s",
-                'active'
+                "SELECT COUNT(*) FROM %1s WHERE status = %s",
+                $table, 'active'
             ));
             $active = $active !== null ? absint($active) : 0;
         
             // Average price (only active properties with price > 0)
             $avg_price = $wpdb->get_var($wpdb->prepare(
-                "SELECT AVG(price) FROM $table WHERE status = %s AND price > 0",
-                'active'
+                "SELECT AVG(price) FROM %1s WHERE status = %s AND price > 0",
+                $table, 'active'
             ));
             $avg_price = $avg_price !== null ? floatval($avg_price) : 0;
         
             // Properties added this month
             $first_day_of_month = date('Y-m-01 00:00:00');
             $new_this_month = $wpdb->get_var($wpdb->prepare(
-                "SELECT COUNT(*) FROM $table WHERE created_at >= %s",
-                $first_day_of_month
+                "SELECT COUNT(*) FROM %1s WHERE created_at >= %s",
+                $table, $first_day_of_month
             ));
             $new_this_month = $new_this_month !== null ? absint($new_this_month) : 0;
         
             // Properties by type
             $by_type_results = $wpdb->get_results($wpdb->prepare(
                 "SELECT property_type, COUNT(*) as count 
-                 FROM $table 
+                 FROM %1s 
                  WHERE status = %s AND property_type IS NOT NULL AND property_type != '' 
                  GROUP BY property_type 
                  ORDER BY count DESC 
                  LIMIT 10",
-                'active'
+                $table, 'active'
             ), ARRAY_A);
         
             $by_type = array();
@@ -174,8 +174,8 @@ class PropertyManager_Property {
         }
         
         $images = $wpdb->get_results($wpdb->prepare(
-            "SELECT * FROM $table WHERE $where ORDER BY sort_order ASC",
-            $property_id
+            "SELECT * FROM %1s WHERE $where ORDER BY sort_order ASC",
+            $table, $property_id
         ));
         
         // Get actual image URLs from WordPress Media Library if attachment_id exists
@@ -200,8 +200,8 @@ class PropertyManager_Property {
         $table = PropertyManager_Database::get_table_name('property_features');
         
         $features = $wpdb->get_col($wpdb->prepare(
-            "SELECT feature_name FROM $table WHERE property_id = %d",
-            $property_id
+            "SELECT feature_name FROM %1s WHERE property_id = %d",
+            $table, $property_id
         ));
         
         return $features;
@@ -224,11 +224,11 @@ class PropertyManager_Property {
         $table = PropertyManager_Database::get_table_name('properties');
         
         $properties = $wpdb->get_results($wpdb->prepare(
-            "SELECT * FROM $table 
+            "SELECT * FROM %1s 
              WHERE status = 'active' AND featured = 1 
              ORDER BY updated_at DESC 
              LIMIT %d",
-            $limit
+            $table, $limit
         ));
         
         // Add images to each property

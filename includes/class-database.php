@@ -789,12 +789,6 @@ class PropertyManager_Database {
             if ($image->attachment_id) {
                 // This will also delete from S3 if using WP Offload Media or similar plugins
                 wp_delete_attachment($image->attachment_id, true);
-                
-                error_log(sprintf(
-                    'Property Manager Pro: Deleted attachment %d for property %d (S3 offload compatible)',
-                    $image->attachment_id,
-                    $property_id
-                ));
             }
         }
         
@@ -811,54 +805,93 @@ class PropertyManager_Database {
     /**
      * Insert property images
      */
-    public static function insert_property_images($property_id, $images) {
+    public static function insert_update_property_images($property_id, $images) {
         global $wpdb;
-        
+
         if (!$property_id || $property_id < 1 || empty($images)) {
             return false;
         }
-        
+
         $table = self::get_table_name('property_images');
         $properties_table = self::get_table_name('properties');
-        
+
         // Verify property exists
         $property_exists = $wpdb->get_var($wpdb->prepare(
             "SELECT COUNT(*) FROM {$properties_table} WHERE id = %d",
             $property_id
         ));
-        
         if (!$property_exists) {
-            error_log('Property Manager Pro: Cannot insert images - property ' . $property_id . ' does not exist');
+            error_log("Property Manager Pro: Cannot insert images - property {$property_id} does not exist");
             return false;
         }
-        
-        // Delete existing images for this property
-        $wpdb->delete($table, array('property_id' => $property_id), array('%d'));
-        
+
+        // Get all existing images once
+        $existing_images = $wpdb->get_results($wpdb->prepare(
+            "SELECT id, original_url FROM {$table} WHERE property_id = %d",
+            $property_id
+        ), ARRAY_A);
+
+        $existing_map = [];
+        foreach ($existing_images as $row) {
+            $existing_map[$row['original_url']] = $row['id'];
+        }
+
         $inserted = 0;
+        $updated  = 0;
+
+        $new_urls = []; // track for cleanup
+
         foreach ($images as $image) {
-            $result = $wpdb->insert(
-                $table,
-                array(
-                    'property_id' => $property_id,
-                    'image_id' => isset($image['id']) ? intval($image['id']) : 0,
-                    'image_url' => esc_url_raw($image['url']),
-                    'original_url' => esc_url_raw($image['url']),
-                    'image_title' => isset($image['title']) ? sanitize_text_field($image['title']) : '',
-                    'image_alt' => isset($image['alt']) ? sanitize_text_field($image['alt']) : '',
-                    'sort_order' => isset($image['sort_order']) ? intval($image['sort_order']) : 0,
-                    'download_status' => 'pending',
-                    'created_at' => current_time('mysql', true)
-                ),
-                array('%d', '%d', '%s', '%s', '%s', '%s', '%d', '%s', '%s')
-            );
-            
-            if ($result !== false) {
-                $inserted++;
+            $original_url = esc_url_raw($image['url']);
+            $new_urls[]   = $original_url;
+
+            $data = [
+                'property_id'     => $property_id,
+                'image_id'        => isset($image['id']) ? intval($image['id']) : 0,
+                'image_url'       => esc_url_raw($image['url']),
+                'original_url'    => $original_url,
+                'image_title'     => isset($image['title']) ? sanitize_text_field($image['title']) : '',
+                'image_alt'       => isset($image['alt']) ? sanitize_text_field($image['alt']) : '',
+                'sort_order'      => isset($image['sort_order']) ? intval($image['sort_order']) : 0,
+                'download_status' => isset($image['download_status']) ? $image['download_status'] : 'pending',
+                'attachment_id'   => isset($image['attachment_id']) ? intval($image['attachment_id']) : null,
+                'updated_at'      => current_time('mysql', true),
+            ];
+
+            if (isset($existing_map[$original_url])) {
+                // Update existing
+                $format = ['%d','%d','%s','%s','%s','%s','%d','%s','%d','%s'];
+                $result = $wpdb->update(
+                    $table,
+                    $data,
+                    ['id' => $existing_map[$original_url]],
+                    $format,
+                    ['%d']
+                );
+                if ($result !== false) {
+                    $updated++;
+                }
+            } else {
+                // Insert new
+                $format = ['%d','%d','%s','%s','%s','%s','%d','%s','%d','%s','%s'];
+                $data['created_at'] = current_time('mysql', true);
+                $result = $wpdb->insert($table, $data, $format);
+                if ($result !== false) {
+                    $inserted++;
+                }
             }
         }
-        
-        return $inserted;
+
+        // Cleanup: delete old images not in new list
+        if (!empty($existing_map)) {
+            $placeholders = implode(',', array_fill(0, count($new_urls), '%s'));
+            $wpdb->query($wpdb->prepare(
+                "DELETE FROM {$table} WHERE property_id = %d AND original_url NOT IN ($placeholders)",
+                array_merge([$property_id], $new_urls)
+            ));
+        }
+
+        return ['inserted' => $inserted, 'updated' => $updated, 'deleted' => count($existing_map) - count($new_urls)];
     }
 
     /**
@@ -866,51 +899,91 @@ class PropertyManager_Database {
      */
     public static function insert_property_features($property_id, $features) {
         global $wpdb;
-        
+
         if (!$property_id || $property_id < 1 || empty($features)) {
             return false;
         }
-        
+
         $table = self::get_table_name('property_features');
         $properties_table = self::get_table_name('properties');
-        
+
         // Verify property exists
         $property_exists = $wpdb->get_var($wpdb->prepare(
             "SELECT COUNT(*) FROM {$properties_table} WHERE id = %d",
             $property_id
         ));
-        
         if (!$property_exists) {
-            error_log('Property Manager Pro: Cannot insert features - property ' . $property_id . ' does not exist');
+            error_log("Property Manager Pro: Cannot insert features - property {$property_id} does not exist");
             return false;
         }
-        
-        // Delete existing features for this property
-        $wpdb->delete($table, array('property_id' => $property_id), array('%d'));
-        
+
+        // Get all existing features once
+        $existing_features = $wpdb->get_results($wpdb->prepare(
+            "SELECT id, feature_name FROM {$table} WHERE property_id = %d",
+            $property_id
+        ), ARRAY_A);
+
+        $existing_map = [];
+        foreach ($existing_features as $row) {
+            $existing_map[$row['feature_name']] = $row['id'];
+        }
+
         $inserted = 0;
+        $updated  = 0;
+
+        $new_names = []; // track for cleanup
+
         foreach ($features as $feature) {
-            $feature_name = is_array($feature) ? $feature['name'] : $feature;
+            $feature_name  = is_array($feature) ? $feature['name'] : $feature;
             $feature_value = is_array($feature) && isset($feature['value']) ? $feature['value'] : null;
-            
-            $result = $wpdb->insert(
-                $table,
-                array(
-                    'property_id' => $property_id,
-                    'feature_name' => sanitize_text_field($feature_name),
-                    'feature_value' => $feature_value ? sanitize_text_field($feature_value) : null,
-                    'created_at' => current_time('mysql', true)
-                ),
-                array('%d', '%s', '%s', '%s')
-            );
-            
-            if ($result !== false) {
-                $inserted++;
+
+            $feature_name_clean  = sanitize_text_field($feature_name);
+            $feature_value_clean = $feature_value ? sanitize_text_field($feature_value) : null;
+
+            $new_names[] = $feature_name_clean;
+
+            $data = [
+                'property_id'   => $property_id,
+                'feature_name'  => $feature_name_clean,
+                'feature_value' => $feature_value_clean
+            ];
+
+            $format = ['%d','%s','%s','%s'];
+
+            if (isset($existing_map[$feature_name_clean])) {
+                // Update existing
+                $result = $wpdb->update(
+                    $table,
+                    $data,
+                    ['id' => $existing_map[$feature_name_clean]],
+                    $format,
+                    ['%d']
+                );
+                if ($result !== false) {
+                    $updated++;
+                }
+            } else {
+                // Insert new
+                $data['created_at'] = current_time('mysql', true);
+                $result = $wpdb->insert($table, $data, $format);
+                if ($result !== false) {
+                    $inserted++;
+                }
             }
         }
-        
-        return $inserted;
+
+        // Cleanup: delete old features not in new list
+        if (!empty($existing_map)) {
+            $placeholders = implode(',', array_fill(0, count($new_names), '%s'));
+            $wpdb->query($wpdb->prepare(
+                "DELETE FROM {$table} WHERE property_id = %d AND feature_name NOT IN ($placeholders)",
+                array_merge([$property_id], $new_names)
+            ));
+        }
+
+        return ['inserted' => $inserted, 'updated' => $updated, 'deleted' => count($existing_map) - count($new_names)];
     }
+
 
     /**
      * Update image attachment ID after download

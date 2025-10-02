@@ -44,7 +44,7 @@ class PropertyManager_ImageDownloader {
     // Processing constants
     private const BATCH_SIZE = 10;
     private const MAX_RETRIES = 3;
-    private const DOWNLOAD_TIMEOUT = 60;
+    private const DOWNLOAD_TIMEOUT = 120;
     private const PROCESSING_DELAY_MS = 100000; // 0.1 second between downloads
     
     public static function get_instance() {
@@ -110,44 +110,7 @@ class PropertyManager_ImageDownloader {
      * Process pending images in batches
      */
     public function process_pending_images($limit = 10) {
-        global $wpdb;
-        $images_table = PropertyManager_Database::get_table_name('property_images');
-    
-        $limit = absint($limit);
-        $limit = max(1, min(100, $limit)); // Between 1-100
-    
-        $pending_images = $wpdb->get_results($wpdb->prepare(
-            "SELECT * FROM {$images_table} 
-             WHERE download_status = 'pending' 
-             AND download_attempts < %d 
-             ORDER BY created_at ASC 
-             LIMIT %d",
-            self::MAX_RETRIES,
-            $limit
-        ));
-    
-        if (empty($pending_images)) {
-            return 0;
-        }
-    
-        $processed = 0;
-        foreach ($pending_images as $image) {
-            $image_data = array(
-                'image_id' => $image->image_id,
-                'sort_order' => $image->sort_order,
-                'original_url' => $image->original_url
-            );
-        
-            $attachment_id = $this->download_image($image->original_url, $image->property_id, $image_data);
-        
-            if ($attachment_id) {
-                $processed++;
-            }
-        
-            usleep(self::PROCESSING_DELAY_MS);
-        }
-    
-        return $processed;
+        return $this->process_pending_images_cron($limit);
     }
 
     /**
@@ -211,8 +174,6 @@ class PropertyManager_ImageDownloader {
                 }
             }
             
-            error_log('Property Manager Pro: Downloading image from ' . $image_url);
-            
             // Get file extension from URL
             $file_info = $this->get_file_info_from_url($image_url);
             
@@ -223,12 +184,8 @@ class PropertyManager_ImageDownloader {
                 throw new Exception('Failed to download image to temporary location');
             }
             
-            error_log('Property Manager Pro: Downloaded to temp file: ' . $temp_file);
-            
             // Validate downloaded image (security checks)
             $this->validate_image($temp_file);
-            
-            error_log('Property Manager Pro: Image validated successfully');
             
             // Add property reference to image data
             $image_data['property_id'] = $property_id;
@@ -243,8 +200,6 @@ class PropertyManager_ImageDownloader {
             // Generate unique filename
             $filename = $this->generate_filename($property_id, $image_data, $file_info['extension']);
             
-            error_log('Property Manager Pro: Saving as ' . $filename);
-            
             // Save to WordPress media library
             // CRITICAL: This triggers S3 offload plugins automatically!
             $attachment_id = $this->save_to_media_library($temp_file, $filename, $image_data);
@@ -252,8 +207,6 @@ class PropertyManager_ImageDownloader {
             if (!$attachment_id) {
                 throw new Exception('Failed to save image to media library');
             }
-            
-            error_log('Property Manager Pro: Successfully created attachment ID ' . $attachment_id . ' (S3 offload will happen automatically)');
             
             return $attachment_id;
             
@@ -265,7 +218,6 @@ class PropertyManager_ImageDownloader {
             // FIXED: Always clean up temp file in finally block
             if ($temp_file && file_exists($temp_file)) {
                 @unlink($temp_file);
-                error_log('Property Manager Pro: Cleaned up temp file');
             }
         }
     }
@@ -312,8 +264,6 @@ class PropertyManager_ImageDownloader {
             error_log('Property Manager Pro: Failed to create temp file');
             return false;
         }
-        
-        error_log('Property Manager Pro: Downloading to temp file ' . $temp_file);
         
         // Download with wp_remote_get using stream mode
         $response = wp_remote_get($url, array(
@@ -489,8 +439,6 @@ class PropertyManager_ImageDownloader {
             throw new Exception('WordPress sideload error: ' . $sideload_result['error']);
         }
         
-        error_log('Property Manager Pro: File sideloaded to ' . $sideload_result['file']);
-        
         // Generate image title and alt text
         $image_title = $this->generate_image_title($image_data);
         $image_alt = $this->generate_image_alt($image_data);
@@ -533,8 +481,6 @@ class PropertyManager_ImageDownloader {
         if (isset($image_data['property_ref'])) {
             update_post_meta($attachment_id, '_property_ref', sanitize_text_field($image_data['property_ref']));
         }
-        
-        error_log('Property Manager Pro: Attachment metadata saved for attachment ID ' . $attachment_id);
         
         return $attachment_id;
     }
@@ -584,27 +530,29 @@ class PropertyManager_ImageDownloader {
     /**
      * Process pending images via cron
      */
-    public function process_pending_images_cron() {
+    public function process_pending_images_cron($limit = self::BATCH_SIZE) {
         global $wpdb;
         
         $images_table = PropertyManager_Database::get_table_name('property_images');
         
+        $processed = 0;
+        $limit = absint($limit);
+        $limit = max(1, min(100, $limit)); // Between 1-100
+
         // Get pending images (limit to batch size)
         $pending_images = $wpdb->get_results($wpdb->prepare(
             "SELECT * FROM {$images_table} 
              WHERE download_status = 'pending' 
              AND download_attempts < %d 
-             ORDER BY created_at ASC 
+             ORDER BY created_at ASC, property_id ASC, sort_order ASC
              LIMIT %d",
             self::MAX_RETRIES,
-            self::BATCH_SIZE
+            $limit
         ));
         
         if (empty($pending_images)) {
-            return;
+            return $processed;
         }
-        
-        error_log('Property Manager Pro: Processing ' . count($pending_images) . ' pending images');
         
         foreach ($pending_images as $image) {
             // Mark as downloading
@@ -644,8 +592,7 @@ class PropertyManager_ImageDownloader {
                     array('%d', '%s', '%s', '%s'),
                     array('%d')
                 );
-                
-                error_log('Property Manager Pro: Successfully processed image ID ' . $image->id);
+                $processed += 1;
             } else {
                 // Failed - mark as failed if max retries reached
                 $status = ($image->download_attempts + 1 >= self::MAX_RETRIES) ? 'failed' : 'pending';
@@ -668,7 +615,7 @@ class PropertyManager_ImageDownloader {
             usleep(self::PROCESSING_DELAY_MS);
         }
         
-        error_log('Property Manager Pro: Finished processing image batch');
+        return $processed;
     }
     
     /**
@@ -727,8 +674,6 @@ class PropertyManager_ImageDownloader {
             foreach ($orphaned as $attachment_id) {
                 wp_delete_attachment($attachment_id, true);
             }
-            
-            error_log('Property Manager Pro: Cleaned up ' . count($orphaned) . ' orphaned attachments');
         }
     }
     

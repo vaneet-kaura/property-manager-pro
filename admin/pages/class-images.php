@@ -22,7 +22,112 @@ class PropertyManager_Admin_Images {
     }
     
     private function __construct() {
+        add_action('admin_init', array($this, 'handle_admin_actions'));
+
+        // Admin notices
+        add_action('admin_notices', array($this, 'display_admin_notices'));
+    }
+    
+
+    public function handle_admin_actions() {
+        // Handle POST actions with proper security
+        if (isset($_POST['action']) && isset($_POST['_wpnonce'])) {
+            
+            // SECURITY: Verify nonce
+            if (!wp_verify_nonce($_POST['_wpnonce'], 'image_management')) {
+                wp_die(
+                    __('Security check failed. Please refresh the page and try again.', 'property-manager-pro'),
+                    __('Security Error', 'property-manager-pro'),
+                    array('response' => 403)
+                );
+            }
+            
+            // SECURITY: Sanitize action
+            $action = sanitize_key($_POST['action']);
+            $image_downloader = PropertyManager_ImageDownloader::get_instance();
+
+            switch ($action) {
+                case 'process_all':
+                    $processed = $image_downloader->process_pending_images(50);
+                    $this->add_admin_notice('success', sprintf(
+                        __('%d images processed successfully.', 'property-manager-pro'),
+                        absint($processed)
+                    ));
+                    break;
+                    
+                case 'retry_failed':
+                    $retried = $image_downloader->retry_failed_downloads(20);
+                    $this->add_admin_notice('success', sprintf(
+                        __('%d failed images queued for retry.', 'property-manager-pro'),
+                        absint($retried)
+                    ));
+                    break;
+                    
+                case 'cleanup_orphaned':
+                    $deleted = $image_downloader->cleanup_orphaned_attachments();
+                    $this->add_admin_notice('success', sprintf(
+                        __('%d orphaned attachments cleaned up.', 'property-manager-pro'),
+                        absint($deleted)
+                    ));
+                    break;
+                    
+                default:
+                    $this->add_admin_notice('error', __('Invalid action specified.', 'property-manager-pro'),);
+                    break;
+            }
+            
+            // Clear dashboard stats cache
+            delete_transient('property_manager_dashboard_stats');
+
+            wp_redirect(add_query_arg(
+                array(
+                    'page' => 'property-manager-images',
+                    'message' => 'deleted'
+                ),
+                admin_url('admin.php')
+            ));
+            exit;
+        }
+    }
+
+    /**
+     * Add admin notice
+     */
+    private function add_admin_notice($type, $message) {
+        $notices = get_transient('property_manager_admin_notices');
         
+        if (!is_array($notices)) {
+            $notices = array();
+        }
+        
+        $notices[] = array(
+            'type' => $type,
+            'message' => $message
+        );
+        
+        set_transient('property_manager_admin_notices', $notices, 60);
+    }
+    
+    /**
+     * Display admin notices
+     */
+    public function display_admin_notices() {
+        $notices = get_transient('property_manager_admin_notices');
+        
+        if (!is_array($notices) || empty($notices)) {
+            return;
+        }
+        
+        foreach ($notices as $notice) {
+            $class = $notice['type'] === 'error' ? 'notice-error' : 'notice-success';
+            ?>
+            <div class="notice <?php echo esc_attr($class); ?> is-dismissible">
+                <p><?php echo esc_html($notice['message']); ?></p>
+            </div>
+            <?php
+        }
+        
+        delete_transient('property_manager_admin_notices');
     }
     
     /**
@@ -37,88 +142,8 @@ class PropertyManager_Admin_Images {
                 array('response' => 403)
             );
         }
-        
         $image_downloader = PropertyManager_ImageDownloader::get_instance();
         $image_stats = $image_downloader->get_image_stats();
-        
-        // Handle POST actions with proper security
-        if (isset($_POST['action']) && isset($_POST['_wpnonce'])) {
-            // SECURITY: Verify nonce
-            if (!wp_verify_nonce($_POST['_wpnonce'], 'image_management')) {
-                wp_die(
-                    __('Security check failed. Please refresh the page and try again.', 'property-manager-pro'),
-                    __('Security Error', 'property-manager-pro'),
-                    array('response' => 403)
-                );
-            }
-            
-            // SECURITY: Sanitize action
-            $action = sanitize_key($_POST['action']);
-            
-            switch ($action) {
-                case 'process_all':
-                    $processed = $image_downloader->process_pending_images(50);
-                    add_settings_error(
-                        'property_manager_images',
-                        'images_processed',
-                        sprintf(
-                            __('%d images processed successfully.', 'property-manager-pro'),
-                            absint($processed)
-                        ),
-                        'success'
-                    );
-                    break;
-                    
-                case 'retry_failed':
-                    $retried = $image_downloader->retry_failed_downloads(20);
-                    add_settings_error(
-                        'property_manager_images',
-                        'images_retried',
-                        sprintf(
-                            __('%d failed images queued for retry.', 'property-manager-pro'),
-                            absint($retried)
-                        ),
-                        'success'
-                    );
-                    break;
-                    
-                case 'cleanup_orphaned':
-                    $deleted = $image_downloader->cleanup_orphaned_attachments();
-                    add_settings_error(
-                        'property_manager_images',
-                        'images_cleaned',
-                        sprintf(
-                            __('%d orphaned attachments cleaned up.', 'property-manager-pro'),
-                            absint($deleted)
-                        ),
-                        'success'
-                    );
-                    break;
-                    
-                default:
-                    add_settings_error(
-                        'property_manager_images',
-                        'invalid_action',
-                        __('Invalid action specified.', 'property-manager-pro'),
-                        'error'
-                    );
-                    break;
-            }
-            
-            // Refresh stats after actions
-            $image_stats = $image_downloader->get_image_stats();
-            
-            // Redirect to prevent form resubmission
-            $redirect_url = add_query_arg(
-                array(
-                    'page' => 'property-manager-images',
-                    'updated' => 1
-                ),
-                admin_url('admin.php')
-            );
-            wp_safe_redirect($redirect_url);
-            exit;
-        }
         
         // Get sample pending/failed images
         global $wpdb;

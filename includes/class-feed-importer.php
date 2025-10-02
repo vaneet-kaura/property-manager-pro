@@ -362,7 +362,7 @@ class PropertyManager_FeedImporter {
                         $images = $this->parse_images($property_xml->images);
                         
                         if (!empty($images)) {
-                            PropertyManager_Database::insert_property_images($property_id, $images);
+                            $result = PropertyManager_Database::insert_update_property_images($property_id, $images);
                             
                             // Limit to first 5 images for performance
                             if (count($images) > 5) {
@@ -420,7 +420,7 @@ class PropertyManager_FeedImporter {
         
         try {
             // Required fields with validation
-            $data['property_id'] = $this->get_xml_value($property_xml->id);
+            $data['property_id'] = "kyero_feed_".$this->get_xml_value($property_xml->id);
             if (empty($data['property_id'])) {
                 throw new Exception('Missing property ID');
             }
@@ -660,6 +660,7 @@ class PropertyManager_FeedImporter {
             $images[] = array(
                 'id' => $image_id ? intval($image_id) : 0,
                 'url' => $image_url,
+                'download_status' => 'pending',
                 'sort_order' => $image_id ? intval($image_id) : 0,
                 'title' => '',
                 'alt' => ''
