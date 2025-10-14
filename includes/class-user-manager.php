@@ -90,11 +90,6 @@ class PropertyManager_UserManager {
     private function maybe_enable_registration() {
         $options = get_option('property_manager_options', array());
         $enable_registration = isset($options['enable_user_registration']) ? $options['enable_user_registration'] : true;
-        
-        if ($enable_registration && !get_option('users_can_register')) {
-            // Log that registration is available through plugin
-            error_log('Property Manager Pro: User registration available through plugin forms');
-        }
     }
     
     /**
@@ -188,9 +183,6 @@ class PropertyManager_UserManager {
         
         // Send welcome email
         $this->send_welcome_email($user_id);
-        
-        // Log registration
-        error_log('Property Manager Pro: New user registered - ID: ' . $user_id);
     }
     
     /**
@@ -239,7 +231,10 @@ class PropertyManager_UserManager {
      * Regenerate session on login for security
      */
     public function regenerate_session_on_login($user_login, $user) {
-        if (function_exists('session_regenerate_id')) {
+		if (function_exists('session_regenerate_id') && function_exists('session_status')) {
+			if (session_status() === PHP_SESSION_NONE) {
+				session_start();
+			}
             session_regenerate_id(true);
         }
     }

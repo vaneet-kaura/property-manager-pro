@@ -916,9 +916,6 @@ The %3$s Team', 'property-manager-pro'),
             'data' => wp_json_encode($data)
         );
         
-        // Log to WordPress error log
-        error_log('Property Manager Security Event: ' . wp_json_encode($log_entry));
-        
         // Optionally store in database for audit trail
         global $wpdb;
         $security_log_table = PropertyManager_Database::get_table_name('security_logs');
@@ -941,12 +938,10 @@ The %3$s Team', 'property-manager-pro'),
             'timestamp' => current_time('mysql', true),
             'event_type' => $event_type,
             'user_id' => is_user_logged_in() ? get_current_user_id() : null,
-            'ip' => $this->get_client_ip(),
+            'ip_address' => $this->get_client_ip(),
+            'user_agent' => $this->get_user_agent(),
             'data' => wp_json_encode($data)
         );
-        
-        // Log to WordPress error log
-        error_log('Property Manager Audit: ' . wp_json_encode($log_entry));
         
         // Store in database for audit trail
         global $wpdb;

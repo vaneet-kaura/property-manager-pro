@@ -246,8 +246,6 @@ class PropertyManager_Ajax {
      * Log security event
      */
     private function log_security_event($event_type, $data) {
-        error_log('Property Manager Security: ' . $event_type . ' - ' . wp_json_encode($data));
-        
         global $wpdb;
         $table = PropertyManager_Database::get_table_name('security_logs');
         

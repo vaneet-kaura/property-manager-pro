@@ -37,7 +37,7 @@ class PropertyManager_SearchForms {
         $defaults = array(
             'show_title' => true,
             'title' => __('Find Your Perfect Property', 'property-manager-pro'),
-            'action_url' => '',
+            'action_url' => get_permalink(get_option('property_manager_pages')['property_search'] ?? ''),
             'method' => 'GET',
             'button_text' => __('Search Properties', 'property-manager-pro'),
             'show_advanced_toggle' => false,
@@ -54,7 +54,7 @@ class PropertyManager_SearchForms {
         
         ob_start();
         ?>
-        <div class="property-search-form border border-light">
+        <div class="property-search-form">
             <?php if ($args['show_title']): ?>
                 <h3 class="text-center mb-4"><?php echo esc_html($args['title']); ?></h3>
             <?php endif; ?>
@@ -64,83 +64,73 @@ class PropertyManager_SearchForms {
                   id="<?php echo esc_attr($args['form_id']); ?>" 
                   class="property-search-form-inner">
                 
-                <div class="row g-3">
-                    <!-- Location Search -->
-                    <div class="col-md-6">
-                        <label for="location" class="form-label">
-                            <?php _e('Location', 'property-manager-pro'); ?>
-                        </label>
-                        <div class="position-relative">
-                            <input type="text" 
-                                   class="form-control" 
-                                   id="location" 
-                                   name="location" 
-                                   value="<?php echo esc_attr($current_values['location']); ?>"
-                                   placeholder="<?php _e('Enter city, town or area...', 'property-manager-pro'); ?>"
-                                   autocomplete="off">
-                            <div class="search-suggestions" id="location-suggestions"></div>
-                        </div>
-                    </div>
-                    
-                    <!-- Property Type -->
-                    <div class="col-md-6">
-                        <label for="property_type" class="form-label">
-                            <?php _e('Property Type', 'property-manager-pro'); ?>
-                        </label>
-                        <select class="form-select" id="property_type" name="property_type">
-                            <option value=""><?php _e('All Types', 'property-manager-pro'); ?></option>
-                            <?php foreach ($options['property_types'] as $type): ?>
-                                <option value="<?php echo esc_attr($type); ?>" <?php selected($current_values['property_type'], $type); ?>>
-                                    <?php echo esc_html($type); ?>
-                                </option>
-                            <?php endforeach; ?>
-                        </select>
-                    </div>
-                    
-                    <!-- Price Range -->
-                    <div class="col-md-6">
-                        <label class="form-label"><?php _e('Price Range', 'property-manager-pro'); ?></label>
-                        <div class="range-inputs">
-                            <input type="number" 
-                                   class="form-control" 
-                                   name="price_min" 
-                                   value="<?php echo esc_attr($current_values['price_min']); ?>"
-                                   placeholder="<?php _e('Min Price', 'property-manager-pro'); ?>"
-                                   min="0">
-                            <span class="range-separator">-</span>
-                            <input type="number" 
-                                   class="form-control" 
-                                   name="price_max" 
-                                   value="<?php echo esc_attr($current_values['price_max']); ?>"
-                                   placeholder="<?php _e('Max Price', 'property-manager-pro'); ?>"
-                                   min="0">
-                        </div>
-                    </div>
-                    
-                    <!-- Bedrooms -->
-                    <div class="col-md-6">
-                        <label for="bedrooms" class="form-label">
-                            <?php _e('Bedrooms', 'property-manager-pro'); ?>
-                        </label>
-                        <select class="form-select" id="bedrooms" name="bedrooms">
-                            <option value=""><?php _e('Any', 'property-manager-pro'); ?></option>
-                            <?php for ($i = 1; $i <= 6; $i++): ?>
-                                <option value="<?php echo $i; ?>" <?php selected($current_values['bedrooms'], $i); ?>>
-                                    <?php echo $i; ?>+ <?php echo $i == 1 ? __('Bedroom', 'property-manager-pro') : __('Bedrooms', 'property-manager-pro'); ?>
-                                </option>
-                            <?php endfor; ?>
-                        </select>
-                    </div>
-                </div>
+				<!-- Location Search -->
+				<div class="form-group mb-3">
+					<label for="location" class="form-label sr-only">
+						<?php _e('Location', 'property-manager-pro'); ?>
+					</label>
+					<div class="position-relative">
+						<input type="text" 
+							   class="form-control" 
+							   id="location" 
+							   name="location" 
+							   value="<?php echo esc_attr($current_values['location']); ?>"
+							   placeholder="<?php _e('Enter city, town or area...', 'property-manager-pro'); ?>"
+							   autocomplete="off">
+						<div class="search-suggestions" id="location-suggestions"></div>
+					</div>
+				</div>
+				
+				<!-- Property Type -->
+				<div class="form-group mb-3">
+					<label for="property_type" class="form-label sr-only">
+						<?php _e('Property Type', 'property-manager-pro'); ?>
+					</label>
+					<select class="form-select" id="property_type" name="property_type">
+						<option value=""><?php _e('Property Type', 'property-manager-pro'); ?></option>
+						<?php foreach ($options['property_types'] as $type): ?>
+							<option value="<?php echo esc_attr($type); ?>" <?php selected($current_values['property_type'], $type); ?>>
+								<?php echo esc_html($type); ?>
+							</option>
+						<?php endforeach; ?>
+					</select>
+				</div>
+				
+				<!-- Price Range -->
+				<div class="form-group mb-3">
+					<label class="form-label sr-only"><?php _e('Price Range', 'property-manager-pro'); ?></label>
+					<div class="d-flex align-items-center">
+						<input type="number" 
+							   class="form-control" 
+							   name="price_min" 
+							   value="<?php echo esc_attr($current_values['price_min']); ?>"
+							   placeholder="<?php _e('Min Price', 'property-manager-pro'); ?>"
+							   min="0">
+						<span class="range-separator d-block px-2">-</span>
+						<input type="number" 
+							   class="form-control" 
+							   name="price_max" 
+							   value="<?php echo esc_attr($current_values['price_max']); ?>"
+							   placeholder="<?php _e('Max Price', 'property-manager-pro'); ?>"
+							   min="0">
+					</div>
+				</div>          
                 
                 <!-- Search Buttons -->
-                <div class="row mt-4">
-                    <div class="col-12 text-center">
-                        <button type="submit" class="btn btn-primary me-2">
+                <div class="row align-items-center">
+                    <div class="col">
+                        <?php if (!$args['show_advanced_toggle']): ?>
+							<a href="<?php echo esc_url(get_permalink(get_option('property_manager_pages')['property_advanced_search'] ?? ''))?>" class="text-white">
+								<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 16 16" fill="none">
+								  <path d="M5.6 8.8H7.2V10.4C7.2 10.6122 7.28429 10.8157 7.43431 10.9657C7.58434 11.1157 7.78783 11.2 8 11.2C8.21217 11.2 8.41566 11.1157 8.56569 10.9657C8.71571 10.8157 8.8 10.6122 8.8 10.4V8.8H10.4C10.6122 8.8 10.8157 8.71571 10.9657 8.56569C11.1157 8.41566 11.2 8.21217 11.2 8C11.2 7.78783 11.1157 7.58434 10.9657 7.43431C10.8157 7.28429 10.6122 7.2 10.4 7.2H8.8V5.6C8.8 5.38783 8.71571 5.18434 8.56569 5.03431C8.41566 4.88429 8.21217 4.8 8 4.8C7.78783 4.8 7.58434 4.88429 7.43431 5.03431C7.28429 5.18434 7.2 5.38783 7.2 5.6V7.2H5.6C5.38783 7.2 5.18434 7.28429 5.03431 7.43431C4.88429 7.58434 4.8 7.78783 4.8 8C4.8 8.21217 4.88429 8.41566 5.03431 8.56569C5.18434 8.71571 5.38783 8.8 5.6 8.8ZM15.2 0H0.8C0.587827 0 0.384344 0.0842854 0.234315 0.234315C0.0842854 0.384344 0 0.587827 0 0.8V15.2C0 15.4122 0.0842854 15.6157 0.234315 15.7657C0.384344 15.9157 0.587827 16 0.8 16H15.2C15.4122 16 15.6157 15.9157 15.7657 15.7657C15.9157 15.6157 16 15.4122 16 15.2V0.8C16 0.587827 15.9157 0.384344 15.7657 0.234315C15.6157 0.0842854 15.4122 0 15.2 0ZM14.4 14.4H1.6V1.6H14.4V14.4Z" fill="#FA940C"/>
+								</svg>
+								Advanced search
+							</a>
+						<?php endif; ?>
+                    </div>
+					<div class="col-auto">
+                        <button type="submit" class="btn btn-warning">
                             <i class="fas fa-search me-2"></i><?php echo esc_html($args['button_text']); ?>
-                        </button>
-                        <button type="button" class="btn btn-outline-secondary" onclick="this.form.reset();">
-                            <i class="fas fa-undo me-2"></i><?php _e('Clear', 'property-manager-pro'); ?>
                         </button>
                     </div>
                 </div>
@@ -161,68 +151,7 @@ class PropertyManager_SearchForms {
                 <?php wp_nonce_field('property_search', 'search_nonce'); ?>
             </form>
         </div>
-        
-        <script>
-        jQuery(document).ready(function($) {
-            // Location autocomplete
-            $('#location').on('input', function() {
-                var query = $(this).val();
-                if (query.length >= 2) {
-                    $.ajax({
-                        url: '<?php echo admin_url('admin-ajax.php'); ?>',
-                        type: 'POST',
-                        data: {
-                            action: 'property_search_suggestions',
-                            query: query,
-                            nonce: '<?php echo wp_create_nonce('property_search_suggestions'); ?>'
-                        },
-                        success: function(response) {
-                            if (response.success) {
-                                var suggestions = $('#location-suggestions');
-                                suggestions.empty();
-                                
-                                if (response.data.length > 0) {
-                                    $.each(response.data, function(index, item) {
-                                        suggestions.append('<div class="suggestion-item" data-value="' + item.value + '">' + item.label + '</div>');
-                                    });
-                                    suggestions.show();
-                                } else {
-                                    suggestions.hide();
-                                }
-                            }
-                        }
-                    });
-                } else {
-                    $('#location-suggestions').hide();
-                }
-            });
-            
-            // Handle suggestion clicks
-            $(document).on('click', '.suggestion-item', function() {
-                $('#location').val($(this).data('value'));
-                $('#location-suggestions').hide();
-            });
-            
-            // Hide suggestions when clicking outside
-            $(document).on('click', function(e) {
-                if (!$(e.target).closest('.position-relative').length) {
-                    $('#location-suggestions').hide();
-                }
-            });
-            
-            // Advanced search toggle icon rotation
-            $('[data-bs-toggle="collapse"]').on('click', function() {
-                var icon = $(this).find('i');
-                if ($($(this).data('bs-target')).hasClass('show')) {
-                    icon.removeClass('fa-chevron-up').addClass('fa-chevron-down');
-                } else {
-                    icon.removeClass('fa-chevron-down').addClass('fa-chevron-up');
-                }
-            });
-        });
-        </script>
-        <?php
-        
+        <?php        
         return ob_get_clean();
     }
     
@@ -370,50 +299,6 @@ class PropertyManager_SearchForms {
         <script>
         jQuery(document).ready(function($) {
             // Location autocomplete (reuse from basic form)
-            $('#location').on('input', function() {
-                var query = $(this).val();
-                if (query.length >= 2) {
-                    $.ajax({
-                        url: '<?php echo admin_url('admin-ajax.php'); ?>',
-                        type: 'POST',
-                        data: {
-                            action: 'property_search_suggestions',
-                            query: query,
-                            nonce: '<?php echo wp_create_nonce('property_search_suggestions'); ?>'
-                        },
-                        success: function(response) {
-                            if (response.success) {
-                                var suggestions = $('#location-suggestions');
-                                suggestions.empty();
-                                
-                                if (response.data.length > 0) {
-                                    $.each(response.data, function(index, item) {
-                                        suggestions.append('<div class="suggestion-item" data-value="' + item.value + '">' + item.label + '</div>');
-                                    });
-                                    suggestions.show();
-                                } else {
-                                    suggestions.hide();
-                                }
-                            }
-                        }
-                    });
-                } else {
-                    $('#location-suggestions').hide();
-                }
-            });
-            
-            // Handle suggestion clicks
-            $(document).on('click', '.suggestion-item', function() {
-                $('#location').val($(this).data('value'));
-                $('#location-suggestions').hide();
-            });
-            
-            // Hide suggestions when clicking outside
-            $(document).on('click', function(e) {
-                if (!$(e.target).closest('.position-relative').length) {
-                    $('#location-suggestions').hide();
-                }
-            });
             
             <?php if (is_user_logged_in()): ?>
             // Save search functionality
@@ -754,10 +639,10 @@ class PropertyManager_SearchForms {
         
         // Get unique property types
         $property_types = $wpdb->get_col("
-            SELECT DISTINCT type 
+            SELECT DISTINCT property_type 
             FROM $properties_table 
-            WHERE type IS NOT NULL AND type != '' 
-            ORDER BY type ASC
+            WHERE property_type IS NOT NULL AND property_type != '' 
+            ORDER BY property_type ASC
         ");
         
         // Get unique provinces
@@ -928,7 +813,7 @@ class PropertyManager_SearchForms {
      * AJAX handler for location search suggestions
      */
     public function ajax_search_suggestions() {
-        check_ajax_referer('property_search_suggestions', 'nonce');
+        check_ajax_referer('property_manager_nonce', 'nonce');
         
         $query = sanitize_text_field($_POST['query']);
         

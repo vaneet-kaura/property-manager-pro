@@ -184,23 +184,6 @@ class PropertyManager_Admin {
             return;
         }
         
-        // Styles
-        wp_enqueue_style(
-            'property-manager-admin',
-            PROPERTY_MANAGER_PLUGIN_URL . 'assets/css/admin.css',
-            array(),
-            PROPERTY_MANAGER_VERSION
-        );
-        
-        // Scripts
-        wp_enqueue_script(
-            'property-manager-admin',
-            PROPERTY_MANAGER_PLUGIN_URL . 'assets/js/admin.js',
-            array('jquery'),
-            PROPERTY_MANAGER_VERSION,
-            true
-        );
-        
         // Localize script
         wp_localize_script('property-manager-admin', 'propertyManagerAdmin', array(
             'ajaxUrl' => admin_url('admin-ajax.php'),
@@ -552,7 +535,7 @@ class PropertyManager_Admin {
         $options = get_option('property_manager_options', array());
         $value = isset($options['admin_email']) ? $options['admin_email'] : get_option('admin_email');
         ?>
-        <input type="email" 
+        <input type="email" id="admin_email"
                name="property_manager_options[admin_email]" 
                value="<?php echo esc_attr($value); ?>" 
                class="regular-text" />

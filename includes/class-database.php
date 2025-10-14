@@ -350,6 +350,22 @@ class PropertyManager_Database {
             KEY user_id (user_id),
             KEY timestamp (timestamp)
         ) $charset_collate ENGINE=InnoDB;";
+		
+		// User activity table
+        $user_activity_table = $wpdb->prefix . 'pm_user_activity';
+        $user_activity_sql = "CREATE TABLE IF NOT EXISTS $user_activity_table (
+            id bigint(20) unsigned NOT NULL AUTO_INCREMENT,
+            user_id bigint(20) unsigned NOT NULL,
+            action varchar(50) NOT NULL,
+            metadata text DEFAULT NULL,
+            ip_address varchar(45) DEFAULT NULL,
+            user_agent varchar(255) DEFAULT NULL,			
+			created_at datetime NOT NULL DEFAULT CURRENT_TIMESTAMP,
+            PRIMARY KEY (id),
+            KEY user_id (user_id),
+            KEY action (action),
+            KEY created_at (created_at)
+        ) $charset_collate ENGINE=InnoDB;";
         
         // Search history table
         $search_history_table = $wpdb->prefix . 'pm_search_history';
@@ -383,6 +399,7 @@ class PropertyManager_Database {
         dbDelta($import_logs_sql);
         dbDelta($security_logs_sql);
         dbDelta($audit_logs_sql);
+        dbDelta($user_activity_sql);
         dbDelta($search_history_sql);
         
         // Add foreign key constraints manually (dbDelta doesn't support them)
@@ -390,10 +407,7 @@ class PropertyManager_Database {
         
         // Update database version
         update_option(self::DB_VERSION_OPTION, self::DB_VERSION);
-        
-        // Log database creation
-        error_log('Property Manager Pro: Database tables created successfully');
-        
+                
         return true;
     }
 
@@ -493,6 +507,7 @@ class PropertyManager_Database {
         $tables = array(
             'pm_search_history',
             'pm_audit_logs',
+            'pm_user_activity',
             'pm_security_logs',
             'pm_import_logs',
             'pm_email_logs',
@@ -513,8 +528,6 @@ class PropertyManager_Database {
         
         // Delete options
         delete_option(self::DB_VERSION_OPTION);
-        
-        error_log('Property Manager Pro: Database tables dropped successfully');
         
         return true;
     }
@@ -566,8 +579,6 @@ class PropertyManager_Database {
             
             // Run any migration scripts
             $this->run_migrations($current_version);
-            
-            error_log('Property Manager Pro: Database updated from ' . $current_version . ' to ' . self::DB_VERSION);
         }
     }
 
@@ -1127,17 +1138,6 @@ class PropertyManager_Database {
              WHERE p.id IS NULL"
         );
         
-        if ($deleted_images || $deleted_features || $deleted_favorites || $deleted_views || $deleted_inquiries) {
-            error_log(sprintf(
-                'Property Manager Pro: Cleaned up orphaned records - Images: %d, Features: %d, Favorites: %d, Views: %d, Inquiries: %d',
-                $deleted_images,
-                $deleted_features,
-                $deleted_favorites,
-                $deleted_views,
-                $deleted_inquiries
-            ));
-        }
-        
         return true;
     }
 
@@ -1217,17 +1217,6 @@ class PropertyManager_Database {
             // Commit transaction
             $wpdb->query('COMMIT');
             
-            // Log cleanup
-            error_log(sprintf(
-                'Property Manager Pro: Cleanup completed - Views: %d, Emails: %d, Security: %d, Searches: %d, Imports: %d, Alerts: %d',
-                $deleted_views,
-                $deleted_emails,
-                $deleted_security,
-                $deleted_searches,
-                $deleted_imports,
-                $deleted_alerts
-            ));
-            
         } catch (Exception $e) {
             // Rollback on error
             $wpdb->query('ROLLBACK');
@@ -1254,6 +1243,7 @@ class PropertyManager_Database {
             'pm_import_logs',
             'pm_security_logs',
             'pm_audit_logs',
+            'pm_user_activity',
             'pm_search_history'
         );
         
@@ -1339,6 +1329,7 @@ class PropertyManager_Database {
             'pm_import_logs',
             'pm_security_logs',
             'pm_audit_logs',
+            'pm_user_activity',
             'pm_search_history'
         );
         
@@ -1467,6 +1458,7 @@ class PropertyManager_Database {
             'import_logs' => 'pm_import_logs',
             'security_logs' => 'pm_security_logs',
             'audit_logs' => 'pm_audit_logs',
+            'user_activity' => 'pm_user_activity',
             'search_history' => 'pm_search_history'
         );
         

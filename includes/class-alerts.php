@@ -233,11 +233,8 @@ class PropertyManager_Alerts {
         ));
         
         if (empty($alerts)) {
-            error_log('Property Manager Pro: No alerts to process for frequency: ' . $frequency);
             return;
         }
-        
-        error_log('Property Manager Pro: Processing ' . count($alerts) . ' ' . $frequency . ' alerts');
         
         $property_search = PropertyManager_Search::get_instance();
         $email_manager = PropertyManager_Email::get_instance();
@@ -258,13 +255,10 @@ class PropertyManager_Alerts {
                 
                 // Check if there are new properties
                 if (empty($search_results['properties'])) {
-                    error_log('Property Manager Pro: No new properties found for alert ID ' . $alert->id);
                     // Update last_sent even if no properties found
                     $this->update_alert_last_sent($alert->id);
                     continue;
                 }
-                
-                error_log('Property Manager Pro: Found ' . count($search_results['properties']) . ' properties for alert ID ' . $alert->id);
                 
                 // Send email with properties
                 $email_sent = $email_manager->send_property_alert(
@@ -277,7 +271,6 @@ class PropertyManager_Alerts {
                 if ($email_sent) {
                     // Update last_sent timestamp
                     $this->update_alert_last_sent($alert->id);
-                    error_log('Property Manager Pro: Successfully sent alert email to ' . $alert->email);
                 } else {
                     error_log('Property Manager Pro: Failed to send alert email to ' . $alert->email);
                 }
@@ -286,8 +279,6 @@ class PropertyManager_Alerts {
                 error_log('Property Manager Pro: Error processing alert ID ' . $alert->id . ' - ' . $e->getMessage());
             }
         }
-        
-        error_log('Property Manager Pro: Finished processing ' . $frequency . ' alerts');
     }
     
     /**
@@ -376,10 +367,6 @@ class PropertyManager_Alerts {
             AND token_expires_at IS NOT NULL
             AND token_expires_at < NOW()
         ");
-        
-        if ($deleted > 0) {
-            error_log('Property Manager Pro: Cleaned up ' . $deleted . ' expired alert tokens');
-        }
     }
     
     /**

@@ -102,13 +102,13 @@ class PropertyManagerPro {
     }
 
     public function enqueue_scripts() {
-        wp_enqueue_style(
+		wp_enqueue_style(
             'property-manager-style',
             PROPERTY_MANAGER_PLUGIN_URL . 'assets/css/property-manager.css',
             array(),
             PROPERTY_MANAGER_VERSION
-        );
-        
+        );        
+		
         wp_enqueue_script(
             'property-manager-script',
             PROPERTY_MANAGER_PLUGIN_URL . 'assets/js/property-manager.js',
@@ -116,8 +116,8 @@ class PropertyManagerPro {
             PROPERTY_MANAGER_VERSION,
             true
         );
-        
-        wp_localize_script('property-manager-script', 'property_manager_ajax', array(
+		
+		wp_localize_script('property-manager-script', 'property_manager_ajax', array(
             'ajax_url' => admin_url('admin-ajax.php'),
             'nonce' => wp_create_nonce('property_manager_nonce'),
         ));
@@ -246,10 +246,6 @@ class PropertyManagerPro {
             
             // FIXED: Flush rewrite rules to enable custom property URLs
             flush_rewrite_rules();
-            
-            // Log successful activation
-            error_log('Property Manager Pro: Plugin activated successfully (v' . PROPERTY_MANAGER_VERSION . ')');
-            
         } catch (Exception $e) {
             error_log('Property Manager Pro: Activation error - ' . $e->getMessage());
             wp_die(
@@ -286,9 +282,6 @@ class PropertyManagerPro {
         
         // Flush rewrite rules
         flush_rewrite_rules();
-        
-        // Log deactivation
-        error_log('Property Manager Pro: Plugin deactivated, cron jobs cleared');
     }
 
     /**
@@ -329,9 +322,6 @@ class PropertyManagerPro {
         // Delete user meta created by plugin
         delete_metadata('user', 0, 'property_manager_preferences', '', true);
         delete_metadata('user', 0, 'property_manager_bio', '', true);
-        
-        // Log uninstall
-        error_log('Property Manager Pro: Plugin uninstalled, all data removed');
     }
 
     /**

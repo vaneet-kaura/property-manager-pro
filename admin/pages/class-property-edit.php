@@ -663,10 +663,17 @@ class PropertyManager_Admin_Property_Edit {
                                     <div id="property-images-container" class="property-images-gallery">
                                         <?php if (!empty($property_images)): ?>
                                             <?php foreach ($property_images as $image): ?>
-                                                <div class="property-image-item" data-attachment-id="<?php echo esc_attr($image->attachment_id); ?>">
-                                                    <img src="<?php echo esc_url($image->image_url); ?>" alt="">
-                                                    <button type="button" class="remove-image" title="<?php esc_attr_e('Remove', 'property-manager-pro'); ?>">x</button>
-                                                </div>
+												<?php if($image->attachment_id != null):?>
+													<div class="property-image-item" data-attachment-id="<?php echo esc_attr($image->attachment_id); ?>">
+														<img src="<?php echo esc_url(wp_get_attachment_image_url($image->attachment_id, 'thumbnail')); ?>" alt="">
+														<button type="button" class="remove-image" title="<?php esc_attr_e('Remove', 'property-manager-pro'); ?>">x</button>
+													</div>
+												<?php else:?>
+													<div class="property-image-item" data-attachment-id="<?php echo esc_attr($image->attachment_id); ?>">
+														<img src="<?php echo esc_url($image->image_url); ?>" alt="">
+														<button type="button" class="remove-image" title="<?php esc_attr_e('Remove', 'property-manager-pro'); ?>">x</button>
+													</div>
+												<?php endif;?>
                                             <?php endforeach; ?>
                                         <?php endif; ?>
                                     </div>

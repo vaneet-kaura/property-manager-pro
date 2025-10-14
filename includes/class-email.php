@@ -229,9 +229,5 @@ class PropertyManager_Email {
             DELETE FROM {$table}
             WHERE created_at < DATE_SUB(NOW(), INTERVAL 30 DAY)
         ");
-        
-        if ($deleted > 0) {
-            error_log('Property Manager Pro: Cleaned up ' . $deleted . ' old email logs');
-        }
     }
 }

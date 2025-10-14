@@ -71,7 +71,6 @@ class PropertyManager_FeedImporter {
         
         // Prevent concurrent imports
         if (get_transient('property_manager_import_in_progress')) {
-            error_log('Property Manager Pro: Import already in progress, skipping...');
             return false;
         }
         
@@ -109,16 +108,6 @@ class PropertyManager_FeedImporter {
             
             // Complete import log
             $this->complete_import_log('completed', $result);
-            
-            // Log success
-            if (!$manual) {
-                error_log(sprintf(
-                    'Property Manager Pro: Feed import completed successfully. Imported: %d, Updated: %d, Failed: %d',
-                    $result['imported'],
-                    $result['updated'],
-                    $result['failed']
-                ));
-            }
             
             // Release lock
             delete_transient('property_manager_import_in_progress');
@@ -290,15 +279,10 @@ class PropertyManager_FeedImporter {
         $processed_ids = array();
         
         if (!isset($xml->property) || count($xml->property) === 0) {
-            error_log('Property Manager Pro: No properties found in feed');
             return array('imported' => 0, 'updated' => 0, 'failed' => 0, 'total' => 0);
         }
         
         $total_properties = count($xml->property);
-        
-        if ($total_properties > self::MAX_PROPERTIES_PER_BATCH) {
-            error_log('Property Manager Pro: Warning - Feed contains ' . $total_properties . ' properties (max recommended: ' . self::MAX_PROPERTIES_PER_BATCH . ')');
-        }
         
         global $wpdb;
         $properties_table = PropertyManager_Database::get_table_name('properties');
@@ -700,6 +684,11 @@ class PropertyManager_FeedImporter {
     private function generate_property_title($data) {
         $title_parts = array();
         
+		// Beds
+        if (!empty($data['beds'])) {
+            $title_parts[] = $data['beds'] . ' bedroom';
+        }
+		
         // Property type
         if (!empty($data['property_type'])) {
             $title_parts[] = $data['property_type'];
@@ -712,18 +701,7 @@ class PropertyManager_FeedImporter {
             $title_parts[] = 'in ' . $data['province'];
         }
         
-        // Beds
-        if (!empty($data['beds'])) {
-            $title_parts[] = $data['beds'] . ' bed';
-        }
-        
-        // Reference
-        if (!empty($data['ref'])) {
-            $title_parts[] = 'Ref: ' . $data['ref'];
-        }
-        
-        $title = !empty($title_parts) ? implode(' ', $title_parts) : 'Property ' . $data['property_id'];
-        
+        $title = !empty($title_parts) ? implode(' ', $title_parts) : 'Property ' . $data['property_id'];        
         return substr($title, 0, 255); // Limit to database field length
     }
     
@@ -828,9 +806,5 @@ class PropertyManager_FeedImporter {
         ");
         
         $affected_rows = $wpdb->rows_affected;
-        
-        if ($affected_rows > 0) {
-            error_log('Property Manager Pro: Marked ' . $affected_rows . ' old properties as inactive');
-        }
     }
 }

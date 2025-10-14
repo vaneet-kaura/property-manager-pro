@@ -3,8 +3,10 @@
     "",
     "\\admin",
     "\\admin\\pages",
+    "\\assets",
+    "\\assets\\js",
     "\\includes"
   ],
-  "SelectedNode": "\\admin\\pages\\class-properties.php",
+  "SelectedNode": "\\assets\\js\\admin.js",
   "PreviewInSolutionExplorer": false
 }

@@ -64,18 +64,19 @@ class PropertyManager_Shortcodes {
      */
     public function render_basic_search_form($atts) {
         $atts = shortcode_atts(array(
-            'show_title' => 'yes',
+            'show_title' => true,
+            'show_advanced_toggle' => false,
             'title' => __('Search Properties', 'property-manager-pro'),
             'button_text' => __('Search', 'property-manager-pro'),
             'placeholder' => __('Location, Property Type...', 'property-manager-pro'),
-            'action' => '',
+            'action' => get_permalink(get_option('property_manager_pages')['property_search'] ?? ''),
             'class' => ''
         ), $atts, 'property_search_form');
         
         ob_start();
         
         $search_forms = PropertyManager_SearchForms::get_instance();
-        echo $search_forms->render_basic_search_form($atts);
+        echo $search_forms->basic_search_form($atts);
         
         return ob_get_clean();
     }
@@ -96,7 +97,7 @@ class PropertyManager_Shortcodes {
         ob_start();
         
         $search_forms = PropertyManager_SearchForms::get_instance();
-        echo $search_forms->render_advanced_search_form($atts);
+        echo $search_forms->advanced_search_form($atts);
         
         return ob_get_clean();
     }
@@ -313,7 +314,7 @@ class PropertyManager_Shortcodes {
         if (!empty($results['properties'])):
         ?>
             <div class="row row-cols-1 row-cols-md-2 row-cols-lg-3 g-4 property-grid <?php echo esc_attr($atts['class']); ?>">
-                <?php foreach ($results['properties'] as $property): ?>
+                <?php foreach ($results['properties'] as $property):?>
                     <div class="col">
                         <?php $this->render_property_card($property); ?>
                     </div>
@@ -842,7 +843,7 @@ class PropertyManager_Shortcodes {
     /**
      * Helper: Render property card
      */
-    private function render_property_card($property, $style = 'default', $show_remove = false) {
+    private function render_property_card($property, $style = 'default', $show_remove = false) {		
         $safe_property = (object) array(
             'id' => absint($property->id ?? 0),
             'title' => esc_html($property->title ?? ''),
@@ -857,7 +858,7 @@ class PropertyManager_Shortcodes {
             'pool' => absint($property->pool ?? 0),
             'new_build' => absint($property->new_build ?? 0),
             'property_type' => esc_html($property->property_type ?? ''),
-            'featured_image' => esc_url($property->featured_image ?? ''),
+            'featured_image' => is_array($property->images) && count($property->images) > 0 ? ($property->images[0]->attachment_id != null ? wp_get_attachment_image_url($property->images[0]->attachment_id, 'medium') : esc_url($property->images[0]->image_url ?? '')) : "",
             'url' => esc_url(home_url('/property/' . absint($property->id ?? 0)))
         );
         
@@ -899,31 +900,19 @@ class PropertyManager_Shortcodes {
                 </div>
             <?php endif; ?>
             
-            <div class="card-body">
-                <h4 class="text-primary"><?php echo $safe_property->currency . ' ' . number_format($safe_property->price); ?></h4>
-                
-                <h5><a href="<?php echo $safe_property->url; ?>"><?php echo $safe_property->title; ?></a></h5>
-                
-                <p class="text-muted">
-                    <i class="fas fa-map-marker-alt"></i>
-                    <?php echo $safe_property->town . ', ' . $safe_property->province; ?>
-                </p>
-                
+            <div class="card-body position-relative">
+                <h5><?php echo $safe_property->title; ?></h5>
                 <div class="property-features">
                     <?php if ($safe_property->beds): ?>
-                        <span><i class="fas fa-bed"></i> <?php echo $safe_property->beds; ?></span>
+                        <div><i class="fas fa-bed"></i> <?php echo $safe_property->beds; ?></div>
                     <?php endif; ?>
                     <?php if ($safe_property->baths): ?>
-                        <span><i class="fas fa-bath"></i> <?php echo $safe_property->baths; ?></span>
+                        <div><i class="fas fa-bath"></i> <?php echo $safe_property->baths; ?></div>
                     <?php endif; ?>
-                    <?php if ($safe_property->surface_area_built): ?>
-                        <span><i class="fas fa-ruler"></i> <?php echo number_format($safe_property->surface_area_built); ?>m²</span>
-                    <?php endif; ?>
+                    <div><i class="fas fa-map-marker-alt"></i><?php echo $safe_property->town . ', ' . $safe_property->province; ?></div>
                 </div>
-                
-                <a href="<?php echo $safe_property->url; ?>" class="btn btn-primary mt-3">
-                    <?php esc_html_e('View Details', 'property-manager-pro'); ?>
-                </a>
+                <h4 class="text-primary"><?php echo $safe_property->currency . ' ' . number_format($safe_property->price); ?></h4>
+                <a href="<?php echo $safe_property->url; ?>" class="stretched-link"></a>
             </div>
         </div>
         <?php

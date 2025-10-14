@@ -222,7 +222,7 @@ class PropertyManager_Search {
     /**
      * Execute property search
      */
-    public function search($args = array()) {
+    public function search_properties($args = array()) {
         global $wpdb;
         
         $defaults = array(
@@ -375,10 +375,10 @@ class PropertyManager_Search {
         // Add images to each property
         $property_manager = PropertyManager_Property::get_instance();
         foreach ($properties as &$property) {
-            $property->images = $property_manager->get_property_images($property->id, true);
+            $property->images = $property_manager->get_property_images($property->id);
             $property->features = $property_manager->get_property_features($property->id);
         }
-        
+		
         return array(
             'properties' => $properties,
             'total' => $total_results,

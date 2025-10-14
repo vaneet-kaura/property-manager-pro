@@ -570,7 +570,7 @@
     };
 
     // Initialize when document is ready
-    $(document).ready(function () {
+    $(document).ready(function () {		
         PropertyManagerAdmin.init();
     });
 

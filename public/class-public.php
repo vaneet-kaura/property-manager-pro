@@ -138,20 +138,12 @@ class PropertyManager_Public {
      * Enqueue public styles
      */
     public function enqueue_styles() {
-        wp_enqueue_style(
-            'property-manager-public',
-            PROPERTY_MANAGER_PLUGIN_URL . 'assets/css/property-manager.css',
-            array('bootstrap'),
-            PROPERTY_MANAGER_VERSION,
-            'all'
-        );
-        
         // Enqueue Bootstrap 5 CSS
         wp_enqueue_style(
             'bootstrap',
-            'https://cdnjs.cloudflare.com/ajax/libs/bootstrap/5.3.0/css/bootstrap.min.css',
+            'https://cdnjs.cloudflare.com/ajax/libs/bootstrap/5.3.3/css/bootstrap.min.css',
             array(),
-            '5.3.0'
+            '5.3.3'
         );
         
         // Enqueue Font Awesome for icons
@@ -184,18 +176,9 @@ class PropertyManager_Public {
         // Enqueue Bootstrap 5 JS
         wp_enqueue_script(
             'bootstrap',
-            'https://cdnjs.cloudflare.com/ajax/libs/bootstrap/5.3.0/js/bootstrap.bundle.min.js',
+            'https://cdnjs.cloudflare.com/ajax/libs/bootstrap/5.3.3/js/bootstrap.bundle.min.js',
             array('jquery'),
-            '5.3.0',
-            true
-        );
-        
-        // Main public script
-        wp_enqueue_script(
-            'property-manager-public',
-            PROPERTY_MANAGER_PLUGIN_URL . 'assets/js/property-manager.js',
-            array('jquery', 'bootstrap'),
-            PROPERTY_MANAGER_VERSION,
+            '5.3.3',
             true
         );
         

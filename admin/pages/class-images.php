@@ -30,6 +30,10 @@ class PropertyManager_Admin_Images {
     
 
     public function handle_admin_actions() {
+		if (!isset($_GET['page']) || strpos($_GET['page'], 'property-manager-images') === false) {
+            return;
+        }
+		
         // Handle POST actions with proper security
         if (isset($_POST['action']) && isset($_POST['_wpnonce'])) {
             
