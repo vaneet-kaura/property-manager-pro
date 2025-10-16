@@ -64,6 +64,7 @@ class PropertyManager_SearchForms {
                   id="<?php echo esc_attr($args['form_id']); ?>" 
                   class="property-search-form-inner">
                 
+                <input type="hidden" name="featured" value="<?php echo esc_attr($current_values['featured']); ?>" />
 				<!-- Location Search -->
 				<div class="form-group mb-3">
 					<label for="location" class="form-label sr-only">
@@ -160,7 +161,7 @@ class PropertyManager_SearchForms {
      */
     public function advanced_search_form($args = array()) {
         $defaults = array(
-            'show_title' => true,
+            'show_title' => false,
             'title' => __('Advanced Property Search', 'property-manager-pro'),
             'action_url' => '',
             'method' => 'GET',
@@ -178,7 +179,7 @@ class PropertyManager_SearchForms {
         
         ob_start();
         ?>
-        <div class="property-search-form border border-light">
+        <div class="property-search-form p-4 bg-light mb-4 border">
             <?php if ($args['show_title']): ?>
                 <h3 class="text-center mb-4"><?php echo esc_html($args['title']); ?></h3>
             <?php endif; ?>
@@ -294,55 +295,7 @@ class PropertyManager_SearchForms {
                 </div>
             </div>
         </div>
-        <?php endif; ?>
-        
-        <script>
-        jQuery(document).ready(function($) {
-            // Location autocomplete (reuse from basic form)
-            
-            <?php if (is_user_logged_in()): ?>
-            // Save search functionality
-            $('#save-search-btn').on('click', function() {
-                $('#saveSearchModal').modal('show');
-            });
-            
-            $('#enable_alerts').on('change', function() {
-                if ($(this).is(':checked')) {
-                    $('#alert-frequency').show();
-                } else {
-                    $('#alert-frequency').hide();
-                }
-            });
-            
-            $('#confirm-save-search').on('click', function() {
-                var formData = new FormData(document.getElementById('<?php echo esc_attr($args['form_id']); ?>'));
-                formData.append('action', 'property_save_search');
-                formData.append('search_name', $('#search_name').val());
-                formData.append('enable_alerts', $('#enable_alerts').is(':checked') ? '1' : '0');
-                formData.append('alert_frequency', $('#alert_freq').val());
-                formData.append('nonce', '<?php echo wp_create_nonce('property_save_search'); ?>');
-                
-                $.ajax({
-                    url: '<?php echo admin_url('admin-ajax.php'); ?>',
-                    type: 'POST',
-                    data: formData,
-                    processData: false,
-                    contentType: false,
-                    success: function(response) {
-                        if (response.success) {
-                            $('#saveSearchModal').modal('hide');
-                            alert('<?php _e('Search saved successfully!', 'property-manager-pro'); ?>');
-                        } else {
-                            alert('<?php _e('Error saving search. Please try again.', 'property-manager-pro'); ?>');
-                        }
-                    }
-                });
-            });
-            <?php endif; ?>
-        });
-        </script>
-        <?php
-        
+        <?php endif;         
         return ob_get_clean();
     }
     
@@ -619,6 +572,7 @@ class PropertyManager_SearchForms {
             'area_max' => intval($_GET['area_max'] ?? 0) ?: '',
             'plot_min' => intval($_GET['plot_min'] ?? 0) ?: '',
             'plot_max' => intval($_GET['plot_max'] ?? 0) ?: '',
+            'featured' => boolval($_GET['featured'] ?? 0) ?: '',
             'bedrooms' => sanitize_text_field($_GET['bedrooms'] ?? ''),
             'bathrooms' => sanitize_text_field($_GET['bathrooms'] ?? ''),
             'price_freq' => sanitize_text_field($_GET['price_freq'] ?? ''),
@@ -749,63 +703,7 @@ class PropertyManager_SearchForms {
             
             <div id="alert-signup-result" style="display: none;"></div>
         </div>
-        
-        <script>
-        jQuery(document).ready(function($) {
-            $('#<?php echo esc_attr($args['form_id']); ?>').on('submit', function(e) {
-                e.preventDefault();
-                
-                var $form = $(this);
-                var $button = $form.find('button[type="submit"]');
-                var $result = $('#alert-signup-result');
-                
-                // Get current search criteria from main search form if exists
-                var searchCriteria = {};
-                var $searchForm = $('.property-search-form-inner');
-                if ($searchForm.length) {
-                    $searchForm.serializeArray().forEach(function(item) {
-                        if (item.value) {
-                            if (searchCriteria[item.name]) {
-                                if (Array.isArray(searchCriteria[item.name])) {
-                                    searchCriteria[item.name].push(item.value);
-                                } else {
-                                    searchCriteria[item.name] = [searchCriteria[item.name], item.value];
-                                }
-                            } else {
-                                searchCriteria[item.name] = item.value;
-                            }
-                        }
-                    });
-                }
-                
-                $button.prop('disabled', true).html('<i class="fas fa-spinner fa-spin me-2"></i><?php _e('Subscribing...', 'property-manager-pro'); ?>');
-                
-                var formData = $form.serialize() + '&action=property_create_alert&search_criteria=' + encodeURIComponent(JSON.stringify(searchCriteria));
-                
-                $.ajax({
-                    url: '<?php echo admin_url('admin-ajax.php'); ?>',
-                    type: 'POST',
-                    data: formData,
-                    success: function(response) {
-                        $button.prop('disabled', false).html('<i class="fas fa-bell me-2"></i><?php _e('Subscribe to Alerts', 'property-manager-pro'); ?>');
-                        
-                        if (response.success) {
-                            $result.html('<div class="alert alert-success">' + response.data.message + '</div>').show();
-                            $form[0].reset();
-                        } else {
-                            $result.html('<div class="alert alert-danger">' + response.data.message + '</div>').show();
-                        }
-                    },
-                    error: function() {
-                        $button.prop('disabled', false).html('<i class="fas fa-bell me-2"></i><?php _e('Subscribe to Alerts', 'property-manager-pro'); ?>');
-                        $result.html('<div class="alert alert-danger"><?php _e('An error occurred. Please try again.', 'property-manager-pro'); ?></div>').show();
-                    }
-                });
-            });
-        });
-        </script>
-        <?php
-        
+        <?php        
         return ob_get_clean();
     }
     

@@ -87,7 +87,7 @@ class PropertyManager_Shortcodes {
      */
     public function render_advanced_search_form($atts) {
         $atts = shortcode_atts(array(
-            'show_title' => 'yes',
+            'show_title' => false,
             'title' => __('Advanced Property Search', 'property-manager-pro'),
             'button_text' => __('Search', 'property-manager-pro'),
             'action' => '',
@@ -333,7 +333,7 @@ class PropertyManager_Shortcodes {
      */
     public function render_featured_properties($atts) {
         $atts = shortcode_atts(array(
-            'limit' => 6,
+            'limit' => 3,
             'class' => ''
         ), $atts, 'property_featured');
         
@@ -1000,7 +1000,7 @@ class PropertyManager_Shortcodes {
             }
         }
         
-        $boolean_fields = array('pool', 'new_build');
+        $boolean_fields = array('pool', 'new_build', 'featured');
         foreach ($boolean_fields as $field) {
             if (isset($_GET[$field]) && $_GET[$field] == '1') {
                 $params[$field] = 1;
