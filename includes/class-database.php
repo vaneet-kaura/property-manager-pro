@@ -819,7 +819,7 @@ class PropertyManager_Database {
     public static function insert_update_property_images($property_id, $images) {
         global $wpdb;
 
-        if (!$property_id || $property_id < 1 || empty($images)) {
+        if (!$property_id || $property_id < 1) {
             return false;
         }
 
@@ -838,54 +838,42 @@ class PropertyManager_Database {
 
         // Get all existing images once
         $existing_images = $wpdb->get_results($wpdb->prepare(
-            "SELECT id, original_url FROM {$table} WHERE property_id = %d",
+            "SELECT id, attachment_id, original_url FROM {$table} WHERE property_id = %d",
             $property_id
         ), ARRAY_A);
 
         $existing_map = [];
         foreach ($existing_images as $row) {
-            $existing_map[$row['original_url']] = $row['id'];
+            $existing_map[$row['original_url']] = [
+                'id'            => $row['id'],
+                'attachment_id' => intval($row['attachment_id']),
+            ];
         }
 
         $inserted = 0;
         $updated  = 0;
-
         $new_urls = []; // track for cleanup
 
         foreach ($images as $image) {
             $original_url = esc_url_raw($image['url']);
             $new_urls[]   = $original_url;
 
-            $data = [
-                'property_id'     => $property_id,
-                'image_id'        => isset($image['id']) ? intval($image['id']) : 0,
-                'image_url'       => esc_url_raw($image['url']),
-                'original_url'    => $original_url,
-                'image_title'     => isset($image['title']) ? sanitize_text_field($image['title']) : '',
-                'image_alt'       => isset($image['alt']) ? sanitize_text_field($image['alt']) : '',
-                'sort_order'      => isset($image['sort_order']) ? intval($image['sort_order']) : 0,
-                'download_status' => isset($image['download_status']) ? $image['download_status'] : 'pending',
-                'attachment_id'   => isset($image['attachment_id']) ? intval($image['attachment_id']) : null,
-                'updated_at'      => current_time('mysql', true),
-            ];
-
-            if (isset($existing_map[$original_url])) {
-                // Update existing
-                $format = ['%d','%d','%s','%s','%s','%s','%d','%s','%d','%s'];
-                $result = $wpdb->update(
-                    $table,
-                    $data,
-                    ['id' => $existing_map[$original_url]],
-                    $format,
-                    ['%d']
-                );
-                if ($result !== false) {
-                    $updated++;
-                }
-            } else {
-                // Insert new
+            // Insert new
+            if (!isset($existing_map[$original_url])) {
+                $data = [
+                    'property_id'     => $property_id,
+                    'image_id'        => isset($image['id']) ? intval($image['id']) : 0,
+                    'image_url'       => esc_url_raw($image['url']),
+                    'original_url'    => $original_url,
+                    'image_title'     => isset($image['title']) ? sanitize_text_field($image['title']) : '',
+                    'image_alt'       => isset($image['alt']) ? sanitize_text_field($image['alt']) : '',
+                    'sort_order'      => isset($image['sort_order']) ? intval($image['sort_order']) : 0,
+                    'download_status' => isset($image['download_status']) ? $image['download_status'] : 'pending',
+                    'attachment_id'   => isset($image['attachment_id']) ? intval($image['attachment_id']) : null,
+                    'updated_at'      => current_time('mysql', true),
+                    'created_at'      => current_time('mysql', true),
+                ];
                 $format = ['%d','%d','%s','%s','%s','%s','%d','%s','%d','%s','%s'];
-                $data['created_at'] = current_time('mysql', true);
                 $result = $wpdb->insert($table, $data, $format);
                 if ($result !== false) {
                     $inserted++;
@@ -893,16 +881,54 @@ class PropertyManager_Database {
             }
         }
 
-        // Cleanup: delete old images not in new list
+        // --- Cleanup old images not in new list ---
+        $deleted = 0;
         if (!empty($existing_map)) {
-            $placeholders = implode(',', array_fill(0, count($new_urls), '%s'));
-            $wpdb->query($wpdb->prepare(
-                "DELETE FROM {$table} WHERE property_id = %d AND original_url NOT IN ($placeholders)",
-                array_merge([$property_id], $new_urls)
-            ));
+
+            // Determine which existing URLs are not in the new list
+            $to_delete = array_filter($existing_map, function ($key) use ($new_urls) {
+                return !in_array($key, $new_urls, true);
+            }, ARRAY_FILTER_USE_KEY);
+
+            if (!empty($to_delete)) {
+                // Ensure media functions exist
+                if (!function_exists('wp_tempnam')) {
+                    require_once ABSPATH . 'wp-admin/includes/file.php';
+                }
+                if (!function_exists('wp_delete_attachment')) {
+                    require_once ABSPATH . 'wp-admin/includes/media.php';
+                }
+
+                // Delete attachments first
+                foreach ($to_delete as $item) {
+                    $attachment_id = $item['attachment_id'];
+                    if ($attachment_id > 0 && get_post($attachment_id)) {
+                        wp_delete_attachment($attachment_id, true);
+                    }
+                }
+
+                // Delete from your table in one go
+                if(count($new_urls) == 0) {
+                    $wpdb->query($wpdb->prepare(
+                        "DELETE FROM {$table} WHERE property_id = %d",
+                        $property_id
+                    ));
+                } else {
+                    $placeholders = implode(',', array_fill(0, count($new_urls), '%s'));                
+                    $wpdb->query($wpdb->prepare(
+                        "DELETE FROM {$table} WHERE property_id = %d AND original_url NOT IN ($placeholders)",
+                        array_merge([$property_id], $new_urls)
+                    ));
+                }
+                $deleted = count($to_delete);
+            }
         }
 
-        return ['inserted' => $inserted, 'updated' => $updated, 'deleted' => count($existing_map) - count($new_urls)];
+        return [
+            'inserted' => $inserted,
+            'updated'  => $updated,
+            'deleted'  => $deleted
+        ];
     }
 
     /**

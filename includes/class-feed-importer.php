@@ -344,15 +344,7 @@ class PropertyManager_FeedImporter {
                     // Import images
                     if (isset($property_xml->images) && $property_xml->images->image) {
                         $images = $this->parse_images($property_xml->images);
-                        
-                        if (!empty($images)) {
-                            $result = PropertyManager_Database::insert_update_property_images($property_id, $images);
-                            
-                            // Limit to first 5 images for performance
-                            if (count($images) > 5) {
-                                $images = array_slice($images, 0, 5);
-                            }
-                        }
+                        $result = PropertyManager_Database::insert_update_property_images($property_id, $images);
                     }
                     
                     // Import features

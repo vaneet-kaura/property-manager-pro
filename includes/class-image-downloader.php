@@ -257,6 +257,10 @@ class PropertyManager_ImageDownloader {
      * Download image to temporary location with security checks
      */
     private function download_to_temp($url) {
+        if (!function_exists('wp_tempnam')) {
+            require_once ABSPATH . 'wp-admin/includes/file.php';
+        }
+
         // Create temp filename
         $temp_file = wp_tempnam('property-image-');
         
