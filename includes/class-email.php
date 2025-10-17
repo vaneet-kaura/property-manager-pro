@@ -225,9 +225,9 @@ class PropertyManager_Email {
         $table = PropertyManager_Database::get_table_name('email_logs');
         
         // Delete logs older than 30 days
-        $deleted = $wpdb->query("
+        $deleted = $wpdb->query($wpdb->prepare("
             DELETE FROM {$table}
-            WHERE created_at < DATE_SUB(NOW(), INTERVAL 30 DAY)
-        ");
+            WHERE created_at < DATE_SUB(%s, INTERVAL 30 DAY)
+        ", current_time('mysql')));
     }
 }

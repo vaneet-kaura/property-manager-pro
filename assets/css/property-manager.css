@@ -51,3 +51,282 @@
     padding-top: 1.5rem;
     border-top: 2px solid #e9ecef;
 }
+/**********************************************************/
+
+/**
+ * Property Map Styles
+ * Add these styles to your theme's style.css or assets/css/style.css
+ */
+
+/* Map Container */
+.property-map-view {
+    position: relative;
+    width: 100%;
+    margin-bottom: 2rem;
+}
+
+#properties-map {
+    width: 100%;
+    height: 600px;
+    border-radius: 8px;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+    z-index: 1;
+}
+
+/* Custom Property Marker */
+.custom-property-marker {
+    background: transparent;
+    border: none;
+}
+
+.marker-pin {
+    width: 40px;
+    height: 40px;
+    border-radius: 50% 50% 50% 0;
+    background: #007bff;
+    position: absolute;
+    transform: rotate(-45deg);
+    left: 50%;
+    top: 50%;
+    margin: -20px 0 0 -20px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
+    transition: all 0.3s ease;
+}
+
+    .marker-pin:hover {
+        background: #0056b3;
+        transform: rotate(-45deg) scale(1.1);
+    }
+
+    .marker-pin i {
+        color: #fff;
+        font-size: 16px;
+        transform: rotate(45deg);
+    }
+
+/* Property Popup */
+.leaflet-popup-content-wrapper {
+    border-radius: 8px;
+    padding: 0;
+    overflow: hidden;
+}
+
+.leaflet-popup-content {
+    margin: 0;
+    width: 280px !important;
+}
+
+.property-map-popup {
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+}
+
+.popup-image {
+    width: 100%;
+    height: 160px;
+    overflow: hidden;
+    position: relative;
+}
+
+    .popup-image img {
+        width: 100%;
+        height: 100%;
+        object-fit: cover;
+        transition: transform 0.3s ease;
+    }
+
+    .popup-image:hover img {
+        transform: scale(1.05);
+    }
+
+.popup-content {
+    padding-top: 15px;
+}
+
+.popup-title {
+    font-size: 16px;
+    font-weight: 600;
+    margin: 0 0 10px 0;
+    color: #333;
+    line-height: 1.4;
+}
+
+.popup-features {
+    display: flex;
+    gap: 15px;
+    margin-bottom: 8px;
+    font-size: 14px;
+    color: #666;
+}
+
+    .popup-features span {
+        display: flex;
+        align-items: center;
+        gap: 5px;
+    }
+
+    .popup-features i {
+        color: #007bff;
+    }
+
+.popup-location {
+    font-size: 13px;
+    color: #666;
+    margin-bottom: 10px;
+    display: flex;
+    align-items: center;
+    gap: 5px;
+}
+
+    .popup-location i {
+        color: #dc3545;
+    }
+
+.popup-price {
+    font-size: 18px;
+    font-weight: 700;
+    color: #007bff;
+    margin-bottom: 12px;
+}
+
+.popup-content .btn {
+    width: 100%;
+    padding: 8px 16px;
+    font-size: 14px;
+    border-radius: 4px;
+    text-decoration: none;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    transition: all 0.3s ease;
+}
+
+    .popup-content .btn:hover {
+        transform: translateY(-1px);
+        box-shadow: 0 2px 8px rgba(0, 123, 255, 0.3);
+    }
+
+/* Leaflet Popup Arrow */
+.leaflet-popup-tip {
+    background: #fff;
+}
+
+/* Property Highlight Effect */
+.property-card.highlighted,
+.property-list-item.highlighted {
+    animation: highlightPulse 1s ease-in-out 2;
+    box-shadow: 0 0 0 3px #007bff;
+    border-radius: 8px;
+}
+
+@keyframes highlightPulse {
+    0%, 100% {
+        box-shadow: 0 0 0 3px #007bff;
+    }
+
+    50% {
+        box-shadow: 0 0 0 6px rgba(0, 123, 255, 0.5);
+    }
+}
+
+/* View Switcher Active State */
+.view-switcher .btn.active {
+    background-color: #007bff;
+    border-color: #007bff;
+    color: #fff;
+}
+
+/* Responsive Map */
+@media (max-width: 768px) {
+    #properties-map {
+        height: 400px;
+    }
+
+    .leaflet-popup-content {
+        width: 240px !important;
+    }
+
+    .popup-image {
+        height: 120px;
+    }
+
+    .popup-title {
+        font-size: 14px;
+    }
+
+    .popup-price {
+        font-size: 16px;
+    }
+}
+
+@media (max-width: 576px) {
+    #properties-map {
+        height: 350px;
+        border-radius: 4px;
+    }
+
+    .marker-pin {
+        width: 35px;
+        height: 35px;
+        margin: -17.5px 0 0 -17.5px;
+    }
+
+        .marker-pin i {
+            font-size: 14px;
+        }
+}
+
+/* Map Loading State */
+.property-map-view.loading {
+    position: relative;
+}
+
+    .property-map-view.loading::before {
+        content: '';
+        position: absolute;
+        top: 0;
+        left: 0;
+        right: 0;
+        bottom: 0;
+        background: rgba(255, 255, 255, 0.8);
+        z-index: 10;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+    }
+
+    .property-map-view.loading::after {
+        content: 'Loading map...';
+        position: absolute;
+        top: 50%;
+        left: 50%;
+        transform: translate(-50%, -50%);
+        z-index: 11;
+        font-size: 16px;
+        color: #666;
+    }
+
+/* Leaflet Control Styling */
+
+.leaflet-control-attribution {
+    font-size: 11px;
+    background: rgba(255, 255, 255, 0.8);
+}
+
+/* Map Cluster Markers (if using marker clustering) */
+.marker-cluster-small,
+.marker-cluster-medium,
+.marker-cluster-large {
+    background-color: rgba(0, 123, 255, 0.6);
+}
+
+    .marker-cluster-small div,
+    .marker-cluster-medium div,
+    .marker-cluster-large div {
+        background-color: rgba(0, 123, 255, 0.8);
+        color: #fff;
+        font-weight: 600;
+    }

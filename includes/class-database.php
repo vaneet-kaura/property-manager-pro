@@ -1182,30 +1182,30 @@ class PropertyManager_Database {
             
             // Clean up old property views (keep only 30 days)
             $views_table = self::get_table_name('property_views');
-            $deleted_views = $wpdb->query(
+            $deleted_views = $wpdb->query($wpdb->prepare(
                 "DELETE FROM {$views_table} 
-                 WHERE viewed_at < DATE_SUB(NOW(), INTERVAL 30 DAY)"
+                 WHERE viewed_at < DATE_SUB(%s, INTERVAL 30 DAY)", current_time('mysql'))
             );
             
             // Clean up old email logs (keep only 90 days)
             $email_logs_table = self::get_table_name('email_logs');
-            $deleted_emails = $wpdb->query(
+            $deleted_emails = $wpdb->query($wpdb->prepare(
                 "DELETE FROM {$email_logs_table} 
-                 WHERE created_at < DATE_SUB(NOW(), INTERVAL 90 DAY)"
+                 WHERE created_at < DATE_SUB(%s, INTERVAL 90 DAY)", current_time('mysql'))
             );
             
             // Clean up old security logs (keep only 90 days)
             $security_logs_table = self::get_table_name('security_logs');
-            $deleted_security = $wpdb->query(
+            $deleted_security = $wpdb->query($wpdb->prepare(
                 "DELETE FROM {$security_logs_table} 
-                 WHERE timestamp < DATE_SUB(NOW(), INTERVAL 90 DAY)"
+                 WHERE timestamp < DATE_SUB(%s, INTERVAL 90 DAY)", current_time('mysql'))
             );
             
             // Clean up old search history (keep only 90 days)
             $search_history_table = self::get_table_name('search_history');
-            $deleted_searches = $wpdb->query(
+            $deleted_searches = $wpdb->query($wpdb->prepare(
                 "DELETE FROM {$search_history_table} 
-                 WHERE created_at < DATE_SUB(NOW(), INTERVAL 90 DAY)"
+                 WHERE created_at < DATE_SUB(%s, INTERVAL 90 DAY)", current_time('mysql'))
             );
             
             // Keep only last 100 import logs
@@ -1230,12 +1230,13 @@ class PropertyManager_Database {
             
             // Clean up unverified alerts older than 48 hours
             $alerts_table = self::get_table_name('property_alerts');
-            $deleted_alerts = $wpdb->query(
+            $deleted_alerts = $wpdb->query($wpdb->prepare(
                 "DELETE FROM {$alerts_table} 
                  WHERE email_verified = 0 
                  AND status = 'pending'
-                 AND token_expires_at < NOW()"
-            );
+                 AND token_expires_at < %s",
+                 current_time('mysql')
+            ));
             
             // Optimize tables
             $this->optimize_tables();

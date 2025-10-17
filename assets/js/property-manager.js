@@ -284,3 +284,253 @@ jQuery(document).ready(function ($) {
 
     /***************************************************/
 });
+
+
+/**
+ * Property Manager Pro - Map Functionality
+ */
+
+(function ($) {
+    'use strict';
+
+    // Property Map Handler
+    const PropertyMap = {
+        map: null,
+        markers: [],
+        markerClusterGroup: null,
+
+        /**
+         * Initialize map view
+         */
+        init: function () {
+            const $mapContainer = $('#properties-map');
+
+            if ($mapContainer.length === 0 || typeof L === 'undefined') {
+                return;
+            }
+
+            this.initializeMap($mapContainer);
+        },
+
+        /**
+         * Initialize Leaflet map
+         */
+        initializeMap: function ($container) {
+            const propertiesData = $container.data('properties');
+
+            if (!propertiesData || propertiesData.length === 0) {
+                this.showNoPropertiesMessage($container);
+                return;
+            }
+
+            // Create map centered on first property or default location
+            const centerLat = propertiesData[0].latitude || 37.8;
+            const centerLng = propertiesData[0].longitude || -0.8;
+
+            this.map = L.map('properties-map').setView([centerLat, centerLng], 10);
+
+            // Add OpenStreetMap tile layer (free)
+            L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+                attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors',
+                maxZoom: 19
+            }).addTo(this.map);
+
+            // Add property markers
+            this.addPropertyMarkers(propertiesData);
+
+            // Fit map bounds to show all markers
+            if (this.markers.length > 0) {
+                const group = new L.featureGroup(this.markers);
+                this.map.fitBounds(group.getBounds().pad(0.1));
+            }
+
+            // Fix map display issue when container is initially hidden
+            setTimeout(() => {
+                this.map.invalidateSize();
+            }, 100);
+        },
+
+        /**
+         * Add property markers to map
+         */
+        addPropertyMarkers: function (properties) {
+            const self = this;
+
+            properties.forEach(function (property) {
+                if (!property.latitude || !property.longitude) {
+                    return;
+                }
+
+                // Create custom icon for property markers
+                const propertyIcon = L.divIcon({
+                    className: 'custom-property-marker',
+                    html: '<div class="marker-pin"><i class="fas fa-home"></i></div>',
+                    iconSize: [40, 40],
+                    iconAnchor: [20, 40],
+                    popupAnchor: [0, -40]
+                });
+
+                // Create marker
+                const marker = L.marker([property.latitude, property.longitude], {
+                    icon: propertyIcon,
+                    title: property.title
+                });
+
+                // Create popup content
+                const popupContent = self.createPopupContent(property);
+                marker.bindPopup(popupContent, {
+                    maxWidth: 300,
+                    className: 'property-popup'
+                });
+
+                // Add marker to map and store reference
+                marker.addTo(self.map);
+                self.markers.push(marker);
+
+                // Handle marker click to highlight property card if in list/grid view
+                marker.on('click', function () {
+                    self.highlightProperty(property.id);
+                });
+            });
+        },
+
+        /**
+         * Create popup content for property marker
+         */
+        createPopupContent: function (property) {
+            let html = '<div class="property-map-popup">';
+
+            // Property image
+            if (property.image) {
+                html += '<div class="popup-image">';
+                html += '<img src="' + this.escapeHtml(property.image) + '" alt="' + this.escapeHtml(property.title) + '">';
+                html += '</div>';
+            }
+
+            // Property details
+            html += '<div class="popup-content">';
+            html += '<h6 class="popup-title">' + this.escapeHtml(property.title) + '</h6>';
+
+            // Property features
+            if (property.beds || property.baths) {
+                html += '<div class="popup-features">';
+                if (property.beds) {
+                    html += '<span><i class="fas fa-bed"></i> ' + property.beds + '</span>';
+                }
+                if (property.baths) {
+                    html += '<span><i class="fas fa-bath"></i> ' + property.baths + '</span>';
+                }
+                html += '</div>';
+            }
+
+            // Location
+            if (property.town) {
+                html += '<div class="popup-location">';
+                html += '<i class="fas fa-map-marker-alt"></i> ' + this.escapeHtml(property.town);
+                if (property.province) {
+                    html += ', ' + this.escapeHtml(property.province);
+                }
+                html += '</div>';
+            }
+
+            // Price
+            html += '<div class="popup-price">' + this.escapeHtml(property.price) + '</div>';
+
+            // View button
+            html += '<a href="' + this.escapeHtml(property.url) + '" class="btn btn-warning text-white btn-sm mt-3">';
+            html += 'View Details <i class="fas fa-arrow-right"></i>';
+            html += '</a>';
+
+            html += '</div>';
+            html += '</div>';
+
+            return html;
+        },
+
+        /**
+         * Highlight property card when marker is clicked
+         */
+        highlightProperty: function (propertyId) {
+            // Remove previous highlights
+            $('.property-card, .property-list-item').removeClass('highlighted');
+
+            // Add highlight to matching property
+            const $property = $('[data-property-id="' + propertyId + '"]').closest('.property-card, .property-list-item');
+            if ($property.length) {
+                $property.addClass('highlighted');
+
+                // Scroll to property if not in viewport
+                if (!this.isInViewport($property[0])) {
+                    $('html, body').animate({
+                        scrollTop: $property.offset().top - 100
+                    }, 500);
+                }
+
+                // Remove highlight after 3 seconds
+                setTimeout(function () {
+                    $property.removeClass('highlighted');
+                }, 3000);
+            }
+        },
+
+        /**
+         * Check if element is in viewport
+         */
+        isInViewport: function (element) {
+            const rect = element.getBoundingClientRect();
+            return (
+                rect.top >= 0 &&
+                rect.left >= 0 &&
+                rect.bottom <= (window.innerHeight || document.documentElement.clientHeight) &&
+                rect.right <= (window.innerWidth || document.documentElement.clientWidth)
+            );
+        },
+
+        /**
+         * Show message when no properties with coordinates
+         */
+        showNoPropertiesMessage: function ($container) {
+            $container.html(
+                '<div class="alert alert-info">' +
+                '<i class="fas fa-info-circle"></i> ' +
+                'No properties with valid coordinates to display on map.' +
+                '</div>'
+            );
+        },
+
+        /**
+         * Escape HTML to prevent XSS
+         */
+        escapeHtml: function (text) {
+            if (!text) return '';
+            const map = {
+                '&': '&amp;',
+                '<': '&lt;',
+                '>': '&gt;',
+                '"': '&quot;',
+                "'": '&#039;'
+            };
+            return String(text).replace(/[&<>"']/g, function (m) {
+                return map[m];
+            });
+        }
+    };
+
+    // Initialize map when document is ready
+    $(document).ready(function () {
+        PropertyMap.init();
+
+        // Reinitialize map if view is switched to map
+        $(document).on('click', '.view-switcher a[href*="view=map"]', function () {
+            setTimeout(function () {
+                if ($('#properties-map').length) {
+                    PropertyMap.init();
+                }
+            }, 200);
+        });
+    });
+
+    // Make PropertyMap globally accessible if needed
+    window.PropertyMap = PropertyMap;
+
+})(jQuery);

@@ -45,6 +45,7 @@ class PropertyManagerPro {
         load_plugin_textdomain('property-manager-pro', false, dirname(plugin_basename(__FILE__)) . '/languages');
         $this->includes();
         $this->init_hooks();
+        $this->init_components();
     }
 
     private function includes() {
@@ -70,7 +71,6 @@ class PropertyManagerPro {
     }
 
     private function init_hooks() {
-        add_action('init', array($this, 'init_components'));
         add_action('wp_enqueue_scripts', array($this, 'enqueue_scripts'));
         add_action('admin_enqueue_scripts', array($this, 'admin_enqueue_scripts'));
         

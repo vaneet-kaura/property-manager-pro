@@ -22,19 +22,8 @@ class PropertyManager_Property {
     }
     
     private function __construct() {
-        add_action('init', array($this, 'create_property_post_type'));
-        add_action('wp', array($this, 'track_property_view'));
     }
     
-    /**
-     * Create property custom post type (optional - we're using custom tables)
-     */
-    public function create_property_post_type() {
-        // This is optional since we're using custom tables
-        // But can be useful for WordPress integration
-    }
-    
-
     /**
      * Get property statistics
      * 
@@ -309,13 +298,7 @@ class PropertyManager_Property {
     /**
      * Track property view
      */
-    public function track_property_view() {
-        if (!is_singular() && !isset($_GET['property_id'])) {
-            return;
-        }
-        
-        $property_id = isset($_GET['property_id']) ? intval($_GET['property_id']) : null;
-        
+    public function track_property_view($property_id) {
         if (!$property_id) {
             return;
         }
@@ -354,8 +337,8 @@ class PropertyManager_Property {
             "SELECT id FROM $table 
              WHERE property_id = %d 
              AND " . $where_clause . "
-             AND viewed_at > DATE_SUB(NOW(), INTERVAL 1 HOUR)",
-            $property_id
+             AND viewed_at > DATE_SUB(%s, INTERVAL 1 HOUR)",
+            $property_id, current_time('mysql')
         ));
         
         if (!$recent_view) {

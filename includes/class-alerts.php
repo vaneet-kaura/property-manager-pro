@@ -361,12 +361,12 @@ class PropertyManager_Alerts {
         $table = PropertyManager_Database::get_table_name('property_alerts');
         
         // Delete unverified alerts with expired tokens
-        $deleted = $wpdb->query("
+        $deleted = $wpdb->query($wpdb->Prepare("
             DELETE FROM {$table}
             WHERE email_verified = 0
             AND token_expires_at IS NOT NULL
-            AND token_expires_at < NOW()
-        ");
+            AND token_expires_at < %s
+        ", current_time('mysql')));
     }
     
     /**

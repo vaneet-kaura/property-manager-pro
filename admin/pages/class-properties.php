@@ -347,7 +347,7 @@ class PropertyManager_Admin_Properties {
                                 $property_date = mysql2date(get_option('date_format'), $property->created_at);
                                 
                                 // Property URL
-                                $property_url = get_option('siteurl') . '/property/' . urlencode($property->ref);
+                                $property_url = get_option('siteurl') . '/property/' . intval($property->id);
                                 
                                 // Status badge color
                                 $status_colors = array(

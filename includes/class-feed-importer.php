@@ -414,7 +414,9 @@ class PropertyManager_FeedImporter {
             $data['beds'] = $this->parse_int($property_xml->beds);
             $data['baths'] = $this->parse_int($property_xml->baths);
             $data['pool'] = $this->parse_boolean($property_xml->pool);
-            
+            $data['latitude'] = null;
+            $data['longitude'] = null;
+
             // Location coordinates - FIXED: Handle both decimal and DMS formats
             if (isset($property_xml->location)) {
                 $coordinates = $this->parse_coordinates($property_xml->location);
@@ -485,8 +487,9 @@ class PropertyManager_FeedImporter {
         // Check if it's DMS format (contains degree symbol)
         if (strpos($latitude_str, '°') !== false || strpos($latitude_str, '\'') !== false) {
             // DMS format: 37°52'16.3"N 0°47'44.8"W
-            $coordinates['latitude'] = $this->convert_dms_to_decimal($latitude_str);
-            
+            $longitude_str = explode(" ", $latitude_str)[1];
+            $latitude_str = explode(" ", $latitude_str)[0];
+            $coordinates['latitude'] = $this->convert_dms_to_decimal($latitude_str);            
             if (!empty($longitude_str)) {
                 $coordinates['longitude'] = $this->convert_dms_to_decimal($longitude_str);
             }
@@ -790,12 +793,12 @@ class PropertyManager_FeedImporter {
         $table = PropertyManager_Database::get_table_name('properties');
         
         // Mark properties not updated in last 30 days as inactive
-        $wpdb->query("
+        $wpdb->query($wpdb->prepare("
             UPDATE $table 
             SET status = 'inactive' 
             WHERE status = 'active' 
-            AND updated_at < DATE_SUB(NOW(), INTERVAL 30 DAY)
-        ");
+            AND updated_at < DATE_SUB(%s, INTERVAL 30 DAY)
+        ", current_time('mysql')));
         
         $affected_rows = $wpdb->rows_affected;
     }

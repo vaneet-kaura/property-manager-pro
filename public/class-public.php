@@ -30,7 +30,6 @@ class PropertyManager_Public {
         
         // Template hooks
         add_filter('template_include', array($this, 'property_template'));
-        add_filter('the_content', array($this, 'property_single_content'));
         
         // Rewrite rules for property URLs
         add_action('init', array($this, 'add_rewrite_rules'));
@@ -163,10 +162,6 @@ class PropertyManager_Public {
                 '1.9.4'
             );
         }
-        
-        // Add custom CSS variables
-        $custom_css = $this->get_custom_css();
-        wp_add_inline_style('property-manager-public', $custom_css);
     }
     
     /**
@@ -216,12 +211,7 @@ class PropertyManager_Public {
             'index.php?property_id=$matches[1]',
             'top'
         );
-        
-        add_rewrite_rule(
-            '^property/([^/]+)/?$',
-            'index.php?property_ref=$matches[1]',
-            'top'
-        );
+        flush_rewrite_rules();        
     }
     
     /**
@@ -229,7 +219,6 @@ class PropertyManager_Public {
      */
     public function add_query_vars($vars) {
         $vars[] = 'property_id';
-        $vars[] = 'property_ref';
         return $vars;
     }
     
@@ -237,16 +226,15 @@ class PropertyManager_Public {
      * Property template
      */
     public function property_template($template) {
-        if (get_query_var('property_id') || get_query_var('property_ref')) {
+        if (get_query_var('property_id')) {
             $custom_template = locate_template(array('single-property.php'));
             
             if ($custom_template) {
                 return $custom_template;
             }
             
-            return PROPERTY_MANAGER_PLUGIN_PATH . 'public/templates/single-property.php';
-        }
-        
+            return PROPERTY_MANAGER_PLUGIN_PATH . 'public/single-property.php';
+        }        
         return $template;
     }
     
@@ -254,23 +242,10 @@ class PropertyManager_Public {
      * Handle property view
      */
     public function handle_property_view() {
-        $property_id = get_query_var('property_id');
-        $property_ref = get_query_var('property_ref');
-        
-        if ($property_id || $property_ref) {
+        $property_id = get_query_var('property_id');        
+        if ($property_id) {
             $property_manager = PropertyManager_Property::get_instance();
-            
-            if ($property_ref) {
-                $property = $property_manager->get_property_by_ref($property_ref);
-                if ($property) {
-                    $property_id = $property->id;
-                }
-            }
-            
-            if ($property_id) {
-                // Track view
-                $property_manager->track_view($property_id);
-            }
+            $property_manager->track_property_view($property_id);
         }
     }
     
@@ -320,7 +295,7 @@ class PropertyManager_Public {
      * Check if current page is property page
      */
     private function is_property_page() {
-        return get_query_var('property_id') || get_query_var('property_ref') ? true : false;
+        return get_query_var('property_id') ? true : false;
     }
     
     /**
@@ -329,51 +304,6 @@ class PropertyManager_Public {
     private function is_search_page() {
         $pages = get_option('property_manager_pages', array());
         return is_page($pages);
-    }
-    
-    /**
-     * Get custom CSS
-     */
-    private function get_custom_css() {
-        $options = get_option('property_manager_options', array());
-        
-        $primary_color = isset($options['primary_color']) ? $options['primary_color'] : '#007bff';
-        $secondary_color = isset($options['secondary_color']) ? $options['secondary_color'] : '#6c757d';
-        
-        $css = "
-            :root {
-                --pm-primary-color: {$primary_color};
-                --pm-secondary-color: {$secondary_color};
-            }
-            .property-card:hover {
-                transform: translateY(-5px);
-                transition: transform 0.3s ease;
-            }
-            .favorite-btn.active {
-                color: #dc3545;
-            }
-        ";
-        
-        return $css;
-    }
-    
-    /**
-     * Property single content filter
-     */
-    public function property_single_content($content) {
-        if (get_query_var('property_id')) {
-            $property_id = get_query_var('property_id');
-            $property_manager = PropertyManager_Property::get_instance();
-            $property = $property_manager->get_property($property_id);
-            
-            if ($property) {
-                ob_start();
-                $this->load_template('content-single-property.php', array('property' => $property));
-                return ob_get_clean();
-            }
-        }
-        
-        return $content;
     }
     
     /**

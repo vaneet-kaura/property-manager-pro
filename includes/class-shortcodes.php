@@ -135,25 +135,33 @@ class PropertyManager_Shortcodes {
             $per_page = 12;
         }
         
+        // Override view if in URL
+        if (isset($_GET['view']) && in_array($_GET['view'], array('grid', 'list', 'map'))) {
+            $view = sanitize_text_field($_GET['view']);
+        }
+
+        if ($view === 'map')
+            $per_page = 100;
+            
         // Get search parameters
         $search_params = $this->get_sanitized_search_params();
         $search_params['per_page'] = $per_page;
         $search_params['orderby'] = $orderby;
         $search_params['order'] = $order;
-        $search_params['page'] = isset($_GET['paged']) ? max(1, absint($_GET['paged'])) : 1;
-        
-        // Override view if in URL
-        if (isset($_GET['view']) && in_array($_GET['view'], array('grid', 'list', 'map'))) {
-            $view = sanitize_text_field($_GET['view']);
-        }
+        $search_params['page'] = intval(get_query_var('paged')) > 0 ? get_query_var('paged') : (isset($_GET['paged']) ? max(1, absint($_GET['paged'])) : 1);
         
         ob_start();
         
         $property_search = PropertyManager_Search::get_instance();
         $results = $property_search->search_properties($search_params);
-        
+        $map_properties = [];
+
+        if ($view === 'map') {
+            $map_properties = $this->prepare_map_data($results['properties']);
+            $results['total'] = count($map_properties);
+        }
         ?>
-        <div class="property-search-results-wrapper <?php echo esc_attr($atts['class']); ?>">
+        <div class="property-search-results-wrapper mt-4 <?php echo esc_attr($atts['class']); ?>">
             
             <?php if ($atts['show_view_switcher'] === 'yes' || $atts['show_filters'] === 'yes'): ?>
                 <div class="search-results-header mb-4">
@@ -219,7 +227,7 @@ class PropertyManager_Shortcodes {
             <?php else: ?>
                 
                 <?php if ($view === 'grid'): ?>
-                    <div class="row row-cols-1 row-cols-md-2 row-cols-lg-3 g-4 property-grid">
+                    <div class="row row-cols-1 row-cols-md-2 row-cols-lg-3 row-cols-xxl-4 g-4 property-grid">
                         <?php foreach ($results['properties'] as $property): ?>
                             <div class="col">
                                 <?php $this->render_property_card($property); ?>
@@ -228,31 +236,43 @@ class PropertyManager_Shortcodes {
                     </div>
                     
                 <?php elseif ($view === 'list'): ?>
-                    <div class="property-list">
+                    <div class="row row-cols-1 property-list">
                         <?php foreach ($results['properties'] as $property): ?>
-                            <?php $this->render_property_list_item($property); ?>
+                            <div class="col"><?php $this->render_property_list_item($property); ?></div>
                         <?php endforeach; ?>
                     </div>
                     
                 <?php elseif ($view === 'map'): ?>
                     <div class="property-map-view">
-                        <div id="properties-map" style="height: 600px;" data-properties='<?php echo esc_attr(wp_json_encode($this->prepare_map_data($results['properties']))); ?>'></div>
+                        <div id="properties-map" style="height: 600px;" data-properties='<?php echo esc_attr(wp_json_encode($map_properties)); ?>'></div>
                     </div>
                 <?php endif; ?>
                 
                 <?php if ($atts['show_pagination'] === 'yes' && $results['total'] > $per_page && $view !== 'map'): ?>
                     <div class="search-pagination mt-4">
                         <?php
-                        echo paginate_links(array(
+                        $pages = paginate_links(array(
                             'base' => add_query_arg('paged', '%#%'),
                             'format' => '',
                             'current' => $search_params['page'],
                             'total' => ceil($results['total'] / $per_page),
                             'prev_text' => '&laquo;',
                             'next_text' => '&raquo;',
-                            'type' => 'list'
+                            'type' => 'array'
                         ));
-                        ?>
+                        if ( is_array( $pages ) ) : ?>
+                            <nav aria-label="Page navigation">
+                                <ul class="pagination justify-content-center">
+                                    <?php foreach ( $pages as $page ) : 
+                                        if ( strpos( $page, 'current' ) !== false ) {
+                                            echo '<li class="page-item active"><span class="page-link">' . strip_tags( $page ) . '</span></li>';
+                                        } else {
+                                            echo '<li class="page-item">' . str_replace( 'page-numbers', 'page-link', $page ) . '</li>';
+                                        }
+                                    endforeach; ?>
+                                </ul>
+                            </nav>
+                        <?php endif; ?>
                     </div>
                 <?php endif; ?>
                 
@@ -303,7 +323,7 @@ class PropertyManager_Shortcodes {
         
         if (!empty($results['properties'])):
         ?>
-            <div class="row row-cols-1 row-cols-md-2 row-cols-lg-3 g-4 property-grid <?php echo esc_attr($atts['class']); ?>">
+            <div class="row row-cols-1 row-cols-md-2 row-cols-lg-3 row-cols-xxl-4 g-4 property-grid <?php echo esc_attr($atts['class']); ?>">
                 <?php foreach ($results['properties'] as $property):?>
                     <div class="col">
                         <?php $this->render_property_card($property); ?>
@@ -358,7 +378,7 @@ class PropertyManager_Shortcodes {
             return '<p class="alert alert-danger">' . esc_html__('Property not found.', 'property-manager-pro') . '</p>';
         }
         
-        $template_path = PROPERTY_MANAGER_PLUGIN_PATH . 'public/templates/content-single-property.php';
+        $template_path = PROPERTY_MANAGER_PLUGIN_PATH . 'public/content-single-property.php';
         if (file_exists($template_path)) {
             include $template_path;
         } else {
@@ -470,7 +490,7 @@ class PropertyManager_Shortcodes {
                     <p><?php esc_html_e('Start adding properties to see them here.', 'property-manager-pro'); ?></p>
                 </div>
             <?php else: ?>
-                <div class="row row-cols-1 row-cols-md-2 row-cols-lg-3 g-4">
+                <div class="row row-cols-1 row-cols-md-2 row-cols-lg-3 row-cols-xxl-4 g-4 property-grid">
                     <?php foreach ($favorites['properties'] as $property): ?>
                         <div class="col">
                             <?php $this->render_property_card($property, 'default', true); ?>
@@ -481,12 +501,25 @@ class PropertyManager_Shortcodes {
                 <?php if ($favorites['total'] > $atts['per_page']): ?>
                     <div class="mt-4">
                         <?php
-                        echo paginate_links(array(
+                        $pages = paginate_links(array(
                             'base' => add_query_arg('paged', '%#%'),
                             'current' => $page,
+                            'type'  => 'array',
                             'total' => ceil($favorites['total'] / $atts['per_page'])
                         ));
-                        ?>
+                        if ( is_array( $pages ) ) : ?>
+                            <nav aria-label="Page navigation">
+                                <ul class="pagination justify-content-center">
+                                    <?php foreach ( $pages as $page ) : 
+                                        if ( strpos( $page, 'current' ) !== false ) {
+                                            echo '<li class="page-item active"><span class="page-link">' . strip_tags( $page ) . '</span></li>';
+                                        } else {
+                                            echo '<li class="page-item">' . str_replace( 'page-numbers', 'page-link', $page ) . '</li>';
+                                        }
+                                    endforeach; ?>
+                                </ul>
+                            </nav>
+                        <?php endif; ?>
                     </div>
                 <?php endif; ?>
             <?php endif; ?>
@@ -611,7 +644,7 @@ class PropertyManager_Shortcodes {
                     <p><?php esc_html_e('No recently viewed properties.', 'property-manager-pro'); ?></p>
                 </div>
             <?php else: ?>
-                <div class="row row-cols-1 row-cols-md-2 row-cols-lg-3 g-4">
+                <div class="row row-cols-1 row-cols-md-2 row-cols-lg-3 row-cols-xxl-4 g-4 property-grid">
                     <?php foreach ($last_viewed['properties'] as $property): ?>
                         <div class="col">
                             <?php $this->render_property_card($property); ?>
@@ -673,7 +706,7 @@ class PropertyManager_Shortcodes {
                     <label class="form-label"><?php esc_html_e('Email', 'property-manager-pro'); ?></label>
                     <input type="email" name="user_email" class="form-control" required>
                 </div>
-                <button type="submit" class="btn btn-primary"><?php esc_html_e('Register', 'property-manager-pro'); ?></button>
+                <button type="submit" class="btn btn-warning"><?php esc_html_e('Register', 'property-manager-pro'); ?></button>
             </form>
         </div>
         <?php
@@ -693,7 +726,7 @@ class PropertyManager_Shortcodes {
                     <label class="form-label"><?php esc_html_e('Email Address', 'property-manager-pro'); ?></label>
                     <input type="email" name="user_login" class="form-control" required>
                 </div>
-                <button type="submit" class="btn btn-primary"><?php esc_html_e('Reset Password', 'property-manager-pro'); ?></button>
+                <button type="submit" class="btn btn-warning"><?php esc_html_e('Reset Password', 'property-manager-pro'); ?></button>
             </form>
         </div>
         <?php
@@ -743,7 +776,7 @@ class PropertyManager_Shortcodes {
                 <input type="hidden" name="property_id" value="<?php echo esc_attr($property_id); ?>">
                 <input type="hidden" name="property_inquiry_submit" value="1">
                 
-                <button type="submit" class="btn btn-primary">
+                <button type="submit" class="btn btn-warning">
                     <?php esc_html_e('Send Inquiry', 'property-manager-pro'); ?>
                 </button>
             </form>
@@ -821,7 +854,7 @@ class PropertyManager_Shortcodes {
                 <?php wp_nonce_field('property_alert_signup', 'alert_nonce'); ?>
                 <input type="hidden" name="property_alert_submit" value="1">
                 
-                <button type="submit" class="btn btn-primary mt-3">
+                <button type="submit" class="btn btn-warning mt-3">
                     <?php esc_html_e('Create Alert', 'property-manager-pro'); ?>
                 </button>
             </form>
@@ -841,12 +874,12 @@ class PropertyManager_Shortcodes {
             $is_favorite = $favorites_manager->is_favorite($safe_property->id);
         }        
         ?>
-        <div class="card property-card h-100">
+        <div class="card property-card h-100 rounded-3 overflow-hidden">
             <?php if ($safe_property->featured_image): ?>
-                <div class="position-relative">
+                <div class="position-relative bg-black">
                     <a href="<?php echo $safe_property->url; ?>">
                         <img src="<?php echo $safe_property->featured_image; ?>" 
-                             class="card-img-top" 
+                             class="card-img-top rounded-0" 
                              alt="<?php echo $safe_property->title; ?>">
                     </a>
                     
@@ -901,7 +934,7 @@ class PropertyManager_Shortcodes {
             $is_favorite = $favorites_manager->is_favorite($safe_property->id);
         } 
         ?>
-        <div class="card property-card mb-3">
+        <div class="card rounded-3 property-card overflow-hidden mb-3">
             <div class="row g-0">
                 <?php if ($safe_property->featured_image): ?>
                     <div class="col-md-4 position-relative">
@@ -955,23 +988,49 @@ class PropertyManager_Shortcodes {
      */
     private function prepare_map_data($properties) {
         $map_data = array();
-        
+    
         foreach ($properties as $property) {
-            if (!empty($property->latitude) && !empty($property->longitude)) {
-                $map_data[] = array(
-                    'id' => absint($property->id),
-                    'title' => esc_html($property->title),
-                    'price' => esc_html($property->currency . ' ' . number_format($property->price)),
-                    'url' => esc_url(home_url('/property/' . $property->id)),
-                    'lat' => floatval($property->latitude),
-                    'lng' => floatval($property->longitude)
-                );
+            // Only include properties with valid coordinates
+            if (empty($property->latitude) || empty($property->longitude)) {
+                continue;
             }
-        }
         
+            // Convert latitude/longitude from DMS format if needed
+            $latitude = floatval($property->latitude);
+            $longitude = floatval($property->longitude);
+        
+            // Skip if coordinates are invalid
+            if ($latitude === false || $longitude === false) {
+                continue;
+            }
+        
+            // Get the featured image
+            $featured_image = '';
+            if (is_array($property->images) && count($property->images) > 0) {
+                if ($property->images[0]->attachment_id != null) {
+                    $featured_image = wp_get_attachment_image_url($property->images[0]->attachment_id, 'medium');
+                } else if (!empty($property->images[0]->image_url)) {
+                    $featured_image = $property->images[0]->image_url;
+                }
+            }
+        
+            $map_data[] = array(
+                'id' => absint($property->id),
+                'title' => esc_html($property->title),
+                'price' => esc_html(($property->currency == "EUR" ? "&euro;" : "") . number_format($property->price)),
+                'beds' => absint($property->beds ?? 0),
+                'baths' => absint($property->baths ?? 0),
+                'town' => esc_html($property->town ?? ''),
+                'province' => esc_html($property->province ?? ''),
+                'latitude' => floatval($latitude),
+                'longitude' => floatval($longitude),
+                'image' => esc_url($featured_image),
+                'url' => esc_url(home_url('/property/' . absint($property->id)))
+            );
+        }    
         return $map_data;
     }
-    
+
     /**
      * Helper: Get sanitized search parameters
      */
@@ -1011,7 +1070,7 @@ class PropertyManager_Shortcodes {
         <div class="alert alert-warning text-center">
             <h4><?php esc_html_e('Login Required', 'property-manager-pro'); ?></h4>
             <p><?php esc_html_e('Please login to access this feature.', 'property-manager-pro'); ?></p>
-            <a href="<?php echo esc_url(wp_login_url(get_permalink())); ?>" class="btn btn-primary">
+            <a href="<?php echo esc_url(wp_login_url(get_permalink())); ?>" class="btn btn-warning">
                 <?php esc_html_e('Login', 'property-manager-pro'); ?>
             </a>
         </div>
