@@ -237,20 +237,10 @@ class PropertyManager_Shortcodes {
                 <?php elseif ($view === 'map'): ?>
                     <div class="property-map-view">
                         <div id="properties-map" style="height: 600px;" data-properties='<?php echo esc_attr(wp_json_encode($this->prepare_map_data($results['properties']))); ?>'></div>
-                        
-                        <div class="map-properties-list mt-4">
-                            <div class="row row-cols-1 row-cols-md-2 g-3">
-                                <?php foreach ($results['properties'] as $property): ?>
-                                    <div class="col">
-                                        <?php $this->render_property_card($property, 'compact'); ?>
-                                    </div>
-                                <?php endforeach; ?>
-                            </div>
-                        </div>
                     </div>
                 <?php endif; ?>
                 
-                <?php if ($atts['show_pagination'] === 'yes' && $results['total'] > $per_page): ?>
+                <?php if ($atts['show_pagination'] === 'yes' && $results['total'] > $per_page && $view !== 'map'): ?>
                     <div class="search-pagination mt-4">
                         <?php
                         echo paginate_links(array(
@@ -844,30 +834,12 @@ class PropertyManager_Shortcodes {
      * Helper: Render property card
      */
     private function render_property_card($property, $style = 'default', $show_remove = false) {		
-        $safe_property = (object) array(
-            'id' => absint($property->id ?? 0),
-            'title' => esc_html($property->title ?? ''),
-            'ref' => esc_html($property->ref ?? ''),
-            'price' => floatval($property->price ?? 0),
-            'currency' => esc_html($property->currency ?? 'EUR'),
-            'beds' => absint($property->beds ?? 0),
-            'baths' => absint($property->baths ?? 0),
-            'town' => esc_html($property->town ?? ''),
-            'province' => esc_html($property->province ?? ''),
-            'surface_area_built' => floatval($property->surface_area_built ?? 0),
-            'pool' => absint($property->pool ?? 0),
-            'new_build' => absint($property->new_build ?? 0),
-            'property_type' => esc_html($property->property_type ?? ''),
-            'featured_image' => is_array($property->images) && count($property->images) > 0 ? ($property->images[0]->attachment_id != null ? wp_get_attachment_image_url($property->images[0]->attachment_id, 'medium') : esc_url($property->images[0]->image_url ?? '')) : "",
-            'url' => esc_url(home_url('/property/' . absint($property->id ?? 0)))
-        );
-        
+        $safe_property = $this->get_safe_property($property);        
         $is_favorite = false;
         if (is_user_logged_in()) {
             $favorites_manager = PropertyManager_Favorites::get_instance();
             $is_favorite = $favorites_manager->is_favorite($safe_property->id);
-        }
-        
+        }        
         ?>
         <div class="card property-card h-100">
             <?php if ($safe_property->featured_image): ?>
@@ -879,7 +851,7 @@ class PropertyManager_Shortcodes {
                     </a>
                     
                     <?php if ($safe_property->new_build || $safe_property->pool): ?>
-                        <div class="position-absolute top-0 start-0 p-2">
+                        <div class="position-absolute top-0 start-0 p-2 d-none">
                             <?php if ($safe_property->new_build): ?>
                                 <span class="badge bg-success"><?php esc_html_e('New', 'property-manager-pro'); ?></span>
                             <?php endif; ?>
@@ -904,14 +876,14 @@ class PropertyManager_Shortcodes {
                 <h5><?php echo $safe_property->title; ?></h5>
                 <div class="property-features">
                     <?php if ($safe_property->beds): ?>
-                        <div><i class="fas fa-bed"></i> <?php echo $safe_property->beds; ?></div>
+                        <div><i class="fas fa-fw fa-bed"></i> <?php echo $safe_property->beds; ?> Bedrooms</div>
                     <?php endif; ?>
                     <?php if ($safe_property->baths): ?>
-                        <div><i class="fas fa-bath"></i> <?php echo $safe_property->baths; ?></div>
+                        <div><i class="fas fa-fw fa-bath"></i> <?php echo $safe_property->baths; ?> Bathrooms</div>
                     <?php endif; ?>
-                    <div><i class="fas fa-map-marker-alt"></i><?php echo $safe_property->town . ', ' . $safe_property->province; ?></div>
+                    <div><i class="fas fa-fw fa-map-marker-alt"></i><?php echo $safe_property->town . ', ' . $safe_property->province; ?></div>
                 </div>
-                <h4 class="text-primary"><?php echo $safe_property->currency . ' ' . number_format($safe_property->price); ?></h4>
+                <h4><?php echo $safe_property->currency . ' ' . number_format($safe_property->price); ?></h4>
                 <a href="<?php echo $safe_property->url; ?>" class="stretched-link"></a>
             </div>
         </div>
@@ -922,35 +894,55 @@ class PropertyManager_Shortcodes {
      * Helper: Render property list item
      */
     private function render_property_list_item($property) {
-        $safe_property = (object) array(
-            'id' => absint($property->id ?? 0),
-            'title' => esc_html($property->title ?? ''),
-            'price' => floatval($property->price ?? 0),
-            'currency' => esc_html($property->currency ?? 'EUR'),
-            'beds' => absint($property->beds ?? 0),
-            'baths' => absint($property->baths ?? 0),
-            'town' => esc_html($property->town ?? ''),
-            'province' => esc_html($property->province ?? ''),
-            'featured_image' => esc_url($property->featured_image ?? ''),
-            'url' => esc_url(home_url('/property/' . absint($property->id ?? 0)))
-        );
-        
+        $safe_property = $this->get_safe_property($property);
+        $is_favorite = false;
+        if (is_user_logged_in()) {
+            $favorites_manager = PropertyManager_Favorites::get_instance();
+            $is_favorite = $favorites_manager->is_favorite($safe_property->id);
+        } 
         ?>
-        <div class="card mb-3">
+        <div class="card property-card mb-3">
             <div class="row g-0">
                 <?php if ($safe_property->featured_image): ?>
-                    <div class="col-md-4">
-                        <img src="<?php echo $safe_property->featured_image; ?>" class="img-fluid" alt="<?php echo $safe_property->title; ?>">
+                    <div class="col-md-4 position-relative">
+                        <a href="<?php echo $safe_property->url; ?>">
+                            <img src="<?php echo $safe_property->featured_image; ?>" class="img-fluid" alt="<?php echo $safe_property->title; ?>">
+                        </a>
+                        <?php if ($safe_property->new_build || $safe_property->pool): ?>
+                            <div class="position-absolute top-0 start-0 p-2 d-none">
+                                <?php if ($safe_property->new_build): ?>
+                                    <span class="badge bg-success"><?php esc_html_e('New', 'property-manager-pro'); ?></span>
+                                <?php endif; ?>
+                                <?php if ($safe_property->pool): ?>
+                                    <span class="badge bg-info"><?php esc_html_e('Pool', 'property-manager-pro'); ?></span>
+                                <?php endif; ?>
+                            </div>
+                        <?php endif; ?>
+                    
+                        <div class="position-absolute top-0 end-0 p-2">
+                            <button type="button" 
+                                    class="btn btn-sm btn-light favorite-btn <?php echo $is_favorite ? 'active' : ''; ?>" 
+                                    data-property-id="<?php echo esc_attr($safe_property->id); ?>"
+                                    data-nonce="<?php echo esc_attr(wp_create_nonce('property_manager_nonce')); ?>">
+                                <i class="fas fa-heart"></i>
+                            </button>
+                        </div>
                     </div>
                 <?php endif; ?>
                 <div class="col-md-8">
-                    <div class="card-body">
-                        <h4 class="text-primary"><?php echo $safe_property->currency . ' ' . number_format($safe_property->price); ?></h4>
-                        <h5><a href="<?php echo $safe_property->url; ?>"><?php echo $safe_property->title; ?></a></h5>
-                        <p class="text-muted"><?php echo $safe_property->town . ', ' . $safe_property->province; ?></p>
-                        <a href="<?php echo $safe_property->url; ?>" class="btn btn-primary">
-                            <?php esc_html_e('View Details', 'property-manager-pro'); ?>
-                        </a>
+                    <div class="card-body position-relative">
+                        <h5><?php echo $safe_property->title; ?></h5>
+                        <div class="property-features">
+                            <?php if ($safe_property->beds): ?>
+                                <div><i class="fas fa-fw fa-bed"></i> <?php echo $safe_property->beds; ?> Bedrooms</div>
+                            <?php endif; ?>
+                            <?php if ($safe_property->baths): ?>
+                                <div><i class="fas fa-fw fa-bath"></i> <?php echo $safe_property->baths; ?> Bathrooms</div>
+                            <?php endif; ?>
+                            <div><i class="fas fa-fw fa-map-marker-alt"></i><?php echo $safe_property->town . ', ' . $safe_property->province; ?></div>
+                        </div>
+                        <h4><?php echo $safe_property->currency . ' ' . number_format($safe_property->price); ?></h4>
+                        <a href="<?php echo $safe_property->url; ?>" class="stretched-link"></a>
                     </div>
                 </div>
             </div>
@@ -1025,5 +1017,25 @@ class PropertyManager_Shortcodes {
         </div>
         <?php
         return ob_get_clean();
+    }
+
+    private function get_safe_property($property) {
+        return (object) array(
+            'id' => absint($property->id ?? 0),
+            'title' => esc_html($property->title ?? ''),
+            'ref' => esc_html($property->ref ?? ''),
+            'price' => floatval($property->price ?? 0),
+            'currency' => esc_html($property->currency == "EUR" ? "&euro;" : ""),
+            'beds' => absint($property->beds ?? 0),
+            'baths' => absint($property->baths ?? 0),
+            'town' => esc_html($property->town ?? ''),
+            'province' => esc_html($property->province ?? ''),
+            'surface_area_built' => floatval($property->surface_area_built ?? 0),
+            'pool' => absint($property->pool ?? 0),
+            'new_build' => absint($property->new_build ?? 0),
+            'property_type' => esc_html($property->property_type ?? ''),
+            'featured_image' => is_array($property->images) && count($property->images) > 0 ? ($property->images[0]->attachment_id != null ? wp_get_attachment_image_url($property->images[0]->attachment_id, 'medium') : esc_url($property->images[0]->image_url ?? '')) : "",
+            'url' => esc_url(home_url('/property/' . absint($property->id ?? 0)))
+        );
     }
 }

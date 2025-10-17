@@ -1,12 +1,8 @@
 {
   "ExpandedNodes": [
     "",
-    "\\admin",
-    "\\admin\\pages",
-    "\\assets",
-    "\\assets\\js",
     "\\includes"
   ],
-  "SelectedNode": "\\assets\\js\\admin.js",
+  "SelectedNode": "\\includes\\class-shortcodes.php",
   "PreviewInSolutionExplorer": false
 }
