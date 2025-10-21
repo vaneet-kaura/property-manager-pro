@@ -479,20 +479,22 @@ class PropertyManager_Admin_Import {
         
         // Get importer instance and run import
         $importer = PropertyManager_FeedImporter::get_instance();
-        $result = $importer->manual_import();
+        $result = $importer->import_feed(true);
         
         if ($result && is_array($result)) {
             wp_send_json_success(array(
                 'message' => sprintf(
-                    __('Import completed successfully! Imported: %d, Updated: %d, Failed: %d', 'property-manager-pro'),
+                    __('Import completed successfully! Imported: %d, Updated: %d, Failed: %d, Deactivated: %d', 'property-manager-pro'),
                     absint($result['imported']),
                     absint($result['updated']),
-                    absint($result['failed'])
+                    absint($result['failed']),
+                    absint($result['deactivated'])
                 ),
                 'data' => array(
                     'imported' => absint($result['imported']),
                     'updated' => absint($result['updated']),
-                    'failed' => absint($result['failed'])
+                    'failed' => absint($result['failed']),
+                    'deactivated' => absint($result['deactivated'])
                 )
             ));
         } else {

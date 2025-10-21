@@ -10,37 +10,6 @@
     align-items: center;
 }
 
-.search-suggestions {
-    position: absolute;
-    top: 100%;
-    left: 0;
-    right: 0;
-    background: #fff;
-    border: 1px solid #ddd;
-    border-top: none;
-    border-radius: 0 0 8px 8px;
-    max-height: 200px;
-    overflow-y: auto;
-    z-index: 1000;
-    display: none;
-}
-
-    .search-suggestions .suggestion-item {
-        padding: 0.75rem 1rem;
-        cursor: pointer;
-        border-bottom: 1px solid #f8f9fa;
-        transition: background-color 0.2s ease;
-    }
-
-        .search-suggestions .suggestion-item:hover,
-        .search-suggestions .suggestion-item.active {
-            background-color: #f8f9fa;
-        }
-
-        .search-suggestions .suggestion-item:last-child {
-            border-bottom: none;
-        }
-
 .advanced-search-toggle {
     text-align: center;
     margin-top: 1rem;
@@ -330,3 +299,115 @@
         color: #fff;
         font-weight: 600;
     }
+
+
+/* Property Single Page Styles */
+.property-single-container {
+    background: #f8f9fa;
+    min-height: 100vh;
+}
+
+.property-location {
+    font-size: 1.1rem;
+}
+
+.property-price .price-amount {
+    color: #0d6efd;
+    font-weight: 700;
+}
+
+.property-actions .btn {
+    white-space: nowrap;
+}
+
+.btn-favorite.active {
+    background-color: #dc3545;
+    color: white;
+    border-color: #dc3545;
+}
+
+.btn-favorite:hover {
+    background-color: #dc3545;
+    color: white;
+    border-color: #dc3545;
+}
+
+/* Gallery Styles */
+.property-gallery .carousel-item:after {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    content: '';
+    background: linear-gradient(0deg, rgba(0, 0, 0, 0.25) 0%, rgba(0, 0, 0, 0.25) 100%);
+}
+
+.property-gallery .carousel-item img {
+    border-radius: 0.5rem;
+}
+
+/* Overview Icons */
+.property-overview .bi {
+    flex-shrink: 0;
+}
+
+/* Features List */
+.property-features .bi-check-circle-fill {
+    flex-shrink: 0;
+}
+
+/* Map Container */
+.property-map-container {
+    border: 1px solid #dee2e6;
+}
+
+/* Property Info */
+.property-info ul li {
+    padding: 0.75rem 0;
+    border-bottom: 1px solid #e9ecef;
+}
+
+    .property-info ul li:last-child {
+        border-bottom: none;
+    }
+
+/* Sticky Sidebar */
+@media (min-width: 992px) {
+    .sticky-top {
+        position: sticky;
+        top: 20px;
+        z-index: 1020;
+    }
+}
+
+/* Responsive Adjustments */
+@media (max-width: 767px) {
+    .property-price .price-amount {
+        font-size: 1.5rem;
+    }
+
+    .property-actions {
+        flex-direction: column;
+    }
+
+        .property-actions .btn {
+            width: 100%;
+        }
+
+    .property-overview .col-6 {
+        margin-bottom: 1rem;
+    }
+}
+
+/* Smooth Scrolling */
+html {
+    scroll-behavior: smooth;
+}
+
+/* Loading States */
+.spinner-border-sm {
+    width: 1rem;
+    height: 1rem;
+    border-width: 0.15em;
+}

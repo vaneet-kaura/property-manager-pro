@@ -343,7 +343,7 @@ class PropertyManager_Shortcodes {
      */
     public function render_featured_properties($atts) {
         $atts = shortcode_atts(array(
-            'limit' => 3,
+            'limit' => 4,
             'class' => ''
         ), $atts, 'property_featured');
         
@@ -747,7 +747,7 @@ class PropertyManager_Shortcodes {
         ob_start();
         ?>
         <div class="property-contact-form <?php echo esc_attr($atts['class']); ?>">
-            <h4><?php esc_html_e('Contact About This Property', 'property-manager-pro'); ?></h4>
+            <h3 class="h4 mb-3"><?php esc_html_e('Contact About This Property', 'property-manager-pro'); ?></h3>
             
             <form id="property-inquiry-form" method="post">
                 <div class="mb-3">

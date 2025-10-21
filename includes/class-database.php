@@ -309,6 +309,7 @@ class PropertyManager_Database {
             properties_imported int(11) DEFAULT 0,
             properties_updated int(11) DEFAULT 0,
             properties_failed int(11) DEFAULT 0,
+            properties_deactivated int(11) DEFAULT 0,
             error_message text DEFAULT NULL,
             started_at datetime NOT NULL DEFAULT CURRENT_TIMESTAMP,
             completed_at datetime DEFAULT NULL,
@@ -816,7 +817,7 @@ class PropertyManager_Database {
     /**
      * Insert property images
      */
-    public static function insert_update_property_images($property_id, $images) {
+    public static function insert_update_property_images($property_id, $images, $is_feed) {
         global $wpdb;
 
         if (!$property_id || $property_id < 1) {
@@ -838,7 +839,7 @@ class PropertyManager_Database {
 
         // Get all existing images once
         $existing_images = $wpdb->get_results($wpdb->prepare(
-            "SELECT id, attachment_id, original_url FROM {$table} WHERE property_id = %d",
+            "SELECT id, attachment_id, ".($is_feed ? "original_url" : "image_url")." as original_url FROM {$table} WHERE property_id = %d",
             $property_id
         ), ARRAY_A);
 

@@ -1,50 +1,4 @@
 jQuery(document).ready(function ($) {
-    // Location autocomplete
-    $('#location').on('input', function () {
-        var query = $(this).val();
-        if (query.length >= 2) {
-            $.ajax({
-                url: property_manager_ajax.ajax_url,
-                type: 'POST',
-                data: {
-                    action: 'property_search_suggestions',
-                    query: query,
-                    nonce: property_manager_ajax.nonce
-                },
-                success: function (response) {
-                    if (response.success) {
-                        var suggestions = $('#location-suggestions');
-                        suggestions.empty();
-
-                        if (response.data.length > 0) {
-                            $.each(response.data, function (index, item) {
-                                suggestions.append('<div class="suggestion-item" data-value="' + item.value + '">' + item.label + '</div>');
-                            });
-                            suggestions.show();
-                        } else {
-                            suggestions.hide();
-                        }
-                    }
-                }
-            });
-        } else {
-            $('#location-suggestions').hide();
-        }
-    });
-
-    // Handle suggestion clicks
-    $(document).on('click', '.suggestion-item', function () {
-        $('#location').val($(this).data('value'));
-        $('#location-suggestions').hide();
-    });
-
-    // Hide suggestions when clicking outside
-    $(document).on('click', function (e) {
-        if (!$(e.target).closest('.position-relative').length) {
-            $('#location-suggestions').hide();
-        }
-    });
-
     // Advanced search toggle icon rotation
     $('[data-bs-toggle="collapse"]').on('click', function () {
         var icon = $(this).find('i');
@@ -532,5 +486,53 @@ jQuery(document).ready(function ($) {
 
     // Make PropertyMap globally accessible if needed
     window.PropertyMap = PropertyMap;
-
 })(jQuery);
+
+/*
+document.addEventListener('DOMContentLoaded', function() {
+        const favoriteBtn = document.querySelector('.btn-favorite');
+        if (!favoriteBtn) return;
+    
+        favoriteBtn.addEventListener('click', function() {
+            const propertyId = this.dataset.propertyId;
+            const nonce = this.dataset.nonce;
+            const icon = this.querySelector('i');
+            const text = this.querySelector('.favorite-text');
+            const isActive = this.classList.contains('active');
+        
+            this.disabled = true;
+        
+            const formData = new FormData();
+            formData.append('action', isActive ? 'remove_favorite' : 'add_favorite');
+            formData.append('property_id', propertyId);
+            formData.append('nonce', nonce);
+        
+            fetch('<?php echo esc_url(admin_url('admin-ajax.php')); ?>', {
+                method: 'POST',
+                body: formData
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (data.success) {
+                    if (isActive) {
+                        this.classList.remove('active');
+                        icon.classList.remove('bi-heart-fill');
+                        icon.classList.add('bi-heart');
+                        text.textContent = '<?php esc_html_e('Save', 'property-manager-pro'); ?>';
+                    } else {
+                        this.classList.add('active');
+                        icon.classList.remove('bi-heart');
+                        icon.classList.add('bi-heart-fill');
+                        text.textContent = '<?php esc_html_e('Saved', 'property-manager-pro'); ?>';
+                    }
+                }
+            })
+            .catch(error => {
+                console.error('Error:', error);
+            })
+            .finally(() => {
+                this.disabled = false;
+            });
+        });
+    });
+*/

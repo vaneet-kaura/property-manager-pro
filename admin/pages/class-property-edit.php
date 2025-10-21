@@ -162,7 +162,7 @@ class PropertyManager_Admin_Property_Edit {
                     ));                    
                     $sort_order++;
                 }
-                $result = PropertyManager_Database::insert_update_property_images($property_id, $images);
+                $result = PropertyManager_Database::insert_update_property_images($property_id, $images, false);
             }
             
             // Handle Features
@@ -562,11 +562,11 @@ class PropertyManager_Admin_Property_Edit {
                                             <td><input type="number" id="baths" name="baths" value="<?php echo esc_attr($defaults['baths']); ?>" min="0" class="small-text"></td>
                                         </tr>
                                         <tr>
-                                            <th scope="row"><label for="surface_area_built"><?php esc_html_e('Built Area (m2)', 'property-manager-pro'); ?></label></th>
+                                            <th scope="row"><label for="surface_area_built"><?php esc_html_e('Built Area', 'property-manager-pro'); ?> (m<sup>2</sup>)</label></th>
                                             <td><input type="number" id="surface_area_built" name="surface_area_built" value="<?php echo esc_attr($defaults['surface_area_built']); ?>" min="0" class="regular-text"></td>
                                         </tr>
                                         <tr>
-                                            <th scope="row"><label for="surface_area_plot"><?php esc_html_e('Plot Area (m2)', 'property-manager-pro'); ?></label></th>
+                                            <th scope="row"><label for="surface_area_plot"><?php esc_html_e('Plot Area', 'property-manager-pro'); ?> (m<sup>2</sup>)</label></th>
                                             <td><input type="number" id="surface_area_plot" name="surface_area_plot" value="<?php echo esc_attr($defaults['surface_area_plot']); ?>" min="0" class="regular-text"></td>
                                         </tr>
                                         <tr>
@@ -665,7 +665,7 @@ class PropertyManager_Admin_Property_Edit {
                                             <?php foreach ($property_images as $image): ?>
 												<?php if($image->attachment_id != null):?>
 													<div class="property-image-item" data-attachment-id="<?php echo esc_attr($image->attachment_id); ?>">
-														<img src="<?php echo esc_url(wp_get_attachment_image_url($image->attachment_id, 'thumbnail')); ?>" alt="">
+														<img src="<?php echo esc_url(wp_get_attachment_image_url($image->attachment_id, 'medium')); ?>" alt="">
 														<button type="button" class="remove-image" title="<?php esc_attr_e('Remove', 'property-manager-pro'); ?>">x</button>
 													</div>
 												<?php else:?>

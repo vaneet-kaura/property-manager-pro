@@ -48,10 +48,7 @@ class PropertyManager_FeedImporter {
         $this->feed_url = isset($options['feed_url']) ? $options['feed_url'] : '';
         
         // Hook into cron job
-        add_action('property_manager_import_feed', array($this, 'import_feed'));
-        
-        // Cleanup old properties after import
-        add_action('property_manager_import_feed', array($this, 'cleanup_old_properties_after_import'), 20);
+        add_action('property_manager_import_feed', array($this, 'import_feed'));        
     }
     
     /**
@@ -105,6 +102,9 @@ class PropertyManager_FeedImporter {
             
             // Import properties
             $result = $this->process_properties($xml);
+            
+            // Deactivate properties not in feed
+            $result['deactivated'] = $this->cleanup_old_properties_after_import();
             
             // Complete import log
             $this->complete_import_log('completed', $result);
@@ -321,6 +321,7 @@ class PropertyManager_FeedImporter {
                     
                     if ($existing) {
                         // Update existing property
+                        $property_data['updated_at'] = current_time('mysql');
                         $wpdb->update(
                             $properties_table,
                             $property_data,
@@ -332,10 +333,11 @@ class PropertyManager_FeedImporter {
                         $updated++;
                     } else {
                         // Insert new property
+                        $property_data['updated_at'] = $property_data['created_at'] = current_time('mysql');
                         $wpdb->insert(
                             $properties_table,
                             $property_data,
-                            $this->get_property_format()
+                            array_merge($this->get_property_format(), array('%s'))
                         );
                         $property_id = $wpdb->insert_id;
                         $imported++;
@@ -344,7 +346,7 @@ class PropertyManager_FeedImporter {
                     // Import images
                     if (isset($property_xml->images) && $property_xml->images->image) {
                         $images = $this->parse_images($property_xml->images);
-                        $result = PropertyManager_Database::insert_update_property_images($property_id, $images);
+                        $result = PropertyManager_Database::insert_update_property_images($property_id, $images, true);
                     }
                     
                     // Import features
@@ -733,7 +735,8 @@ class PropertyManager_FeedImporter {
             '%s', // desc_de
             '%s', // desc_fr
             '%s', // title
-            '%s'  // status
+            '%s', // status
+            '%s'  // created_at / updated_at
         );
     }
     
@@ -775,6 +778,7 @@ class PropertyManager_FeedImporter {
             $data['properties_imported'] = $result['imported'];
             $data['properties_updated'] = $result['updated'];
             $data['properties_failed'] = $result['failed'];
+            $data['properties_deactivated'] = $result['deactivated'];
         }
         
         if ($error_message) {
@@ -797,9 +801,9 @@ class PropertyManager_FeedImporter {
             UPDATE $table 
             SET status = 'inactive' 
             WHERE status = 'active' 
-            AND updated_at < DATE_SUB(%s, INTERVAL 30 DAY)
+            AND updated_at < DATE_SUB(%s, INTERVAL 1 MINUTE)
         ", current_time('mysql')));
         
-        $affected_rows = $wpdb->rows_affected;
+        return $wpdb->rows_affected;
     }
 }

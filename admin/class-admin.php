@@ -764,15 +764,17 @@ class PropertyManager_Admin {
             $this->log_admin_action('feed_import', array(
                 'imported' => $result['imported'],
                 'updated' => $result['updated'],
-                'failed' => $result['failed']
+                'failed' => $result['failed'],
+                'deactivated' => $result['deactivated']
             ));
             
             wp_send_json_success(array(
                 'message' => sprintf(
-                    __('Import completed: %d imported, %d updated, %d failed.', 'property-manager-pro'),
+                    __('Import completed: %d imported, %d updated, %d failed, %d deactivated.', 'property-manager-pro'),
                     $result['imported'],
                     $result['updated'],
-                    $result['failed']
+                    $result['failed'],
+                    $result['deactivated']
                 ),
                 'stats' => $result
             ));
@@ -1160,7 +1162,7 @@ class PropertyManager_Admin {
         <div class="wrap">
             <h1><?php esc_html_e('Import Feed', 'property-manager-pro'); ?></h1>
             
-            <div class="card" style="max-width: 1000px;">
+            <div class="card" style="max-width: 1200px;">
                 <h2><?php esc_html_e('Manual Import', 'property-manager-pro'); ?></h2>
                 <p><?php esc_html_e('Click the button below to manually import properties from your Kyero feed.', 'property-manager-pro'); ?></p>
                 
@@ -1173,7 +1175,7 @@ class PropertyManager_Admin {
             </div>
             
             <?php if (!empty($import_stats)): ?>
-                <div class="card" style="max-width: 1000px; margin-top: 20px;">
+                <div class="card" style="max-width: 1200px; margin-top: 20px;">
                     <h2><?php esc_html_e('Recent Imports', 'property-manager-pro'); ?></h2>
                     <table class="wp-list-table widefat fixed striped">
                         <thead>
@@ -1183,6 +1185,7 @@ class PropertyManager_Admin {
                                 <th><?php esc_html_e('Imported', 'property-manager-pro'); ?></th>
                                 <th><?php esc_html_e('Updated', 'property-manager-pro'); ?></th>
                                 <th><?php esc_html_e('Failed', 'property-manager-pro'); ?></th>
+                                <th><?php esc_html_e('Deactivated', 'property-manager-pro'); ?></th>
                             </tr>
                         </thead>
                         <tbody>
@@ -1197,6 +1200,7 @@ class PropertyManager_Admin {
                                     <td><?php echo absint($stat->properties_imported); ?></td>
                                     <td><?php echo absint($stat->properties_updated); ?></td>
                                     <td><?php echo absint($stat->properties_failed); ?></td>
+                                    <td><?php echo absint($stat->properties_deactivated); ?></td>
                                 </tr>
                             <?php endforeach; ?>
                         </tbody>

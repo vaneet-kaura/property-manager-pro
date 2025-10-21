@@ -278,7 +278,8 @@ class PropertyManager_Search {
         } elseif (!empty($args['location'])) {
             // Search in both town and province
             $location_like = '%' . $wpdb->esc_like(sanitize_text_field($args['location'])) . '%';
-            $where_clauses[] = "(town LIKE %s OR province LIKE %s)";
+            $where_clauses[] = "(town LIKE %s OR province LIKE %s OR location_detail LIKE %s)";
+            $where_values[] = $location_like;
             $where_values[] = $location_like;
             $where_values[] = $location_like;
         }

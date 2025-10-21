@@ -17,7 +17,7 @@ if (!defined('ABSPATH')) {
 }
 
 // Define plugin constants
-define('PROPERTY_MANAGER_VERSION', '1.0.1');
+define('PROPERTY_MANAGER_VERSION', '0.0.0');
 define('PROPERTY_MANAGER_PLUGIN_URL', plugin_dir_url(__FILE__));
 define('PROPERTY_MANAGER_PLUGIN_PATH', plugin_dir_path(__FILE__));
 define('PROPERTY_MANAGER_PLUGIN_BASENAME', plugin_basename(__FILE__));

@@ -54,9 +54,9 @@ class PropertyManager_SearchForms {
         
         ob_start();
         ?>
-        <div class="property-search-form">
+        <div class="property-search-form <?php echo esc_attr($args['show_title'] ? "bg-light p-4 border" : "")?>">
             <?php if ($args['show_title']): ?>
-                <h3 class="text-center mb-4"><?php echo esc_html($args['title']); ?></h3>
+                <h3 class="mb-4"><?php echo esc_html($args['title']); ?></h3>
             <?php endif; ?>
             
             <form method="<?php echo esc_attr($args['method']); ?>" 
@@ -65,21 +65,28 @@ class PropertyManager_SearchForms {
                   class="property-search-form-inner">
                 
                 <input type="hidden" name="featured" value="<?php echo esc_attr($current_values['featured']); ?>" />
-				<!-- Location Search -->
+				
+                <!-- Keyword Search -->
+				<div class="form-group mb-3">
+					<label for="keyword" class="form-label sr-only">
+						<?php _e('Search Keyword', 'property-manager-pro'); ?>
+					</label>
+					<input type="search" class="form-control" name="keyword" value="<?php echo esc_attr($current_values['keyword']); ?>" placeholder="Property reference or keyword" />
+				</div>
+
+                <!-- Location Search -->
 				<div class="form-group mb-3">
 					<label for="location" class="form-label sr-only">
 						<?php _e('Location', 'property-manager-pro'); ?>
 					</label>
-					<div class="position-relative">
-						<input type="text" 
-							   class="form-control" 
-							   id="location" 
-							   name="location" 
-							   value="<?php echo esc_attr($current_values['location']); ?>"
-							   placeholder="<?php _e('Enter city, town or area...', 'property-manager-pro'); ?>"
-							   autocomplete="off">
-						<div class="search-suggestions" id="location-suggestions"></div>
-					</div>
+					<select class="form-select" id="town" name="town">
+                        <option value=""><?php _e('Any Town', 'property-manager-pro'); ?></option>
+                        <?php foreach ($options['towns'] as $province => $towns): foreach ($towns as $town): ?>
+                            <option value="<?php echo esc_attr($town); ?>" <?php selected($current_values['town'], $town); ?>>
+                                <?php echo esc_html($town); ?>
+                            </option>
+                        <?php endforeach; endforeach; ?>
+                    </select>
 				</div>
 				
 				<!-- Property Type -->
@@ -191,23 +198,27 @@ class PropertyManager_SearchForms {
                 
                 <!-- Basic Fields Row -->
                 <div class="row g-3 mb-4">
-                    <div class="col-md-6">
-                        <label for="location" class="form-label">
+                    <div class="col-md-4">
+                        <label for="keyword" class="form-label">
+						    <?php _e('Search Keyword', 'property-manager-pro'); ?>
+					    </label>
+					    <input type="search" class="form-control" name="keyword" value="<?php echo esc_attr($current_values['keyword']); ?>" placeholder="Property reference or keyword" />
+                    </div>
+                    <div class="col-md-4">
+                        <label for="town" class="form-label">
                             <?php _e('Location', 'property-manager-pro'); ?>
                         </label>
-                        <div class="position-relative">
-                            <input type="text" 
-                                   class="form-control" 
-                                   id="location" 
-                                   name="location" 
-                                   value="<?php echo esc_attr($current_values['location']); ?>"
-                                   placeholder="<?php _e('Enter city, town or area...', 'property-manager-pro'); ?>"
-                                   autocomplete="off">
-                            <div class="search-suggestions" id="location-suggestions"></div>
-                        </div>
+                        <select class="form-select" id="town" name="town">
+                            <option value=""><?php _e('Any Town', 'property-manager-pro'); ?></option>
+                            <?php foreach ($options['towns'] as $province => $towns): foreach ($towns as $town): ?>
+                                <option value="<?php echo esc_attr($town); ?>" <?php selected($current_values['town'], $town); ?>>
+                                    <?php echo esc_html($town); ?>
+                                </option>
+                            <?php endforeach; endforeach; ?>
+                        </select>
                     </div>
                     
-                    <div class="col-md-6">
+                    <div class="col-md-4">
                         <label for="property_type" class="form-label">
                             <?php _e('Property Type', 'property-manager-pro'); ?>
                         </label>
@@ -393,39 +404,6 @@ class PropertyManager_SearchForms {
                 </div>
             </div>
             
-            <!-- Location Details Row -->
-            <div class="row g-3 mb-3">
-                <div class="col-md-6">
-                    <label for="province" class="form-label">
-                        <?php _e('Province', 'property-manager-pro'); ?>
-                    </label>
-                    <select class="form-select" id="province" name="province">
-                        <option value=""><?php _e('All Provinces', 'property-manager-pro'); ?></option>
-                        <?php foreach ($options['provinces'] as $province): ?>
-                            <option value="<?php echo esc_attr($province); ?>" <?php selected($current_values['province'], $province); ?>>
-                                <?php echo esc_html($province); ?>
-                            </option>
-                        <?php endforeach; ?>
-                    </select>
-                </div>
-                
-                <div class="col-md-6">
-                    <label for="town" class="form-label">
-                        <?php _e('Town', 'property-manager-pro'); ?>
-                    </label>
-                    <select class="form-select" id="town" name="town">
-                        <option value=""><?php _e('All Towns', 'property-manager-pro'); ?></option>
-                        <?php if (!empty($current_values['province'])): ?>
-                            <?php foreach ($options['towns'][$current_values['province']] ?? array() as $town): ?>
-                                <option value="<?php echo esc_attr($town); ?>" <?php selected($current_values['town'], $town); ?>>
-                                    <?php echo esc_html($town); ?>
-                                </option>
-                            <?php endforeach; ?>
-                        <?php endif; ?>
-                    </select>
-                </div>
-            </div>
-            
             <!-- Features Row -->
             <div class="row g-3 mb-3">
                 <div class="col-md-12">
@@ -564,7 +542,9 @@ class PropertyManager_SearchForms {
      */
     private function get_current_search_values() {
         return array(
+            'keyword' => sanitize_text_field($_GET['keyword'] ?? ''),
             'location' => sanitize_text_field($_GET['location'] ?? ''),
+            'town' => sanitize_text_field($_GET['town'] ?? ''),
             'property_type' => sanitize_text_field($_GET['property_type'] ?? ''),
             'price_min' => intval($_GET['price_min'] ?? 0) ?: '',
             'price_max' => intval($_GET['price_max'] ?? 0) ?: '',
@@ -802,7 +782,14 @@ class PropertyManager_SearchForms {
             <div class="card-body">
                 <form method="GET" action="<?php echo esc_url(get_permalink(get_option('property_manager_pages')['property_search'] ?? '')); ?>" id="<?php echo esc_attr($args['form_id']); ?>">
                     <div class="mb-3">
-                        <input type="text" class="form-control" name="location" placeholder="<?php _e('Location...', 'property-manager-pro'); ?>">
+                        <select class="form-select" id="town" name="town">
+                            <option value=""><?php _e('Any Town', 'property-manager-pro'); ?></option>
+                            <?php foreach ($options['towns'] as $province => $town): ?>
+                                <option value="<?php echo esc_attr($town); ?>">
+                                    <?php echo esc_html($town); ?>
+                                </option>
+                            <?php endforeach; ?>
+                        </select>
                     </div>
                     <div class="mb-3">
                         <select class="form-select" name="property_type">

@@ -1,8 +1,14 @@
 {
   "ExpandedNodes": [
     "",
-    "\\includes"
+    "\\admin",
+    "\\admin\\pages",
+    "\\assets",
+    "\\assets\\css",
+    "\\assets\\js",
+    "\\includes",
+    "\\public"
   ],
-  "SelectedNode": "\\includes\\class-shortcodes.php",
+  "SelectedNode": "\\property-manager-pro.php",
   "PreviewInSolutionExplorer": false
 }
