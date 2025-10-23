@@ -693,220 +693,167 @@ class PropertyManager_Admin_Property_Edit {
                 </div>
             </form>
         </div>
-        
-        <style>
-            .property-images-gallery {
-                display: grid;
-                grid-template-columns: repeat(auto-fill, minmax(100px, 1fr));
-                gap: 10px;
-                margin-top: 10px;
-            }
-            
-            .property-image-item {
-                position: relative;
-                aspect-ratio: 1;
-                border: 2px solid #ddd;
-                border-radius: 4px;
-                overflow: hidden;
-                cursor: move;
-            }
-            
-            .property-image-item img {
-                width: 100%;
-                height: 100%;
-                object-fit: cover;
-            }
-            
-            .property-image-item .remove-image {
-                position: absolute;
-                top: 5px;
-                right: 5px;
-                background: rgba(255, 0, 0, 0.8);
-                color: white;
-                border: none;
-                border-radius: 50%;
-                width: 24px;
-                height: 24px;
-                font-size: 16px;
-                line-height: 1;
-                cursor: pointer;
-                display: none;
-            }
-            
-            .property-image-item:hover .remove-image {
-                display: block;
-            }
-            
-            .property-image-item.ui-sortable-helper {
-                opacity: 0.6;
-            }
-            
-            #property-map {
-                cursor: crosshair;
-            }
-        </style>
-        
         <script>
-        jQuery(document).ready(function($) {
-            // ====================
-            // WP MEDIA GALLERY
-            // ====================
+            jQuery(document).ready(function($) {
+                // ====================
+                // WP MEDIA GALLERY
+                // ====================
             
-            var propertyImages = [];
+                var propertyImages = [];
             
-            // Initialize images from existing data
-            <?php if (!empty($property_images)): ?>
-                propertyImages = [<?php echo implode(',', array_map(function($img) { return $img->attachment_id; }, $property_images)); ?>];
-            <?php endif; ?>
+                // Initialize images from existing data
+                <?php if (!empty($property_images)): ?>
+                    propertyImages = [<?php echo implode(',', array_map(function($img) { return $img->attachment_id; }, $property_images)); ?>];
+                <?php endif; ?>
             
-            // Update hidden field
-            function updateImagesField() {
-                $('#property_images_field').val(JSON.stringify(propertyImages));
-            }
-            
-            // WordPress Media Library
-            var mediaFrame;
-            
-            $('#add-images-btn').on('click', function(e) {
-                e.preventDefault();
-                
-                if (mediaFrame) {
-                    mediaFrame.open();
-                    return;
+                // Update hidden field
+                function updateImagesField() {
+                    $('#property_images_field').val(JSON.stringify(propertyImages));
                 }
+            
+                // WordPress Media Library
+                var mediaFrame;
+            
+                $('#add-images-btn').on('click', function(e) {
+                    e.preventDefault();
                 
-                mediaFrame = wp.media({
-                    title: '<?php esc_html_e('Select Property Images', 'property-manager-pro'); ?>',
-                    button: {
-                        text: '<?php esc_html_e('Add to Property', 'property-manager-pro'); ?>'
-                    },
-                    multiple: true,
-                    library: {
-                        type: 'image'
+                    if (mediaFrame) {
+                        mediaFrame.open();
+                        return;
                     }
-                });
                 
-                mediaFrame.on('select', function() {
-                    var selection = mediaFrame.state().get('selection');
-                    
-                    selection.map(function(attachment) {
-                        attachment = attachment.toJSON();
-                        
-                        // Check if already added
-                        if (propertyImages.indexOf(attachment.id) !== -1) {
-                            return;
+                    mediaFrame = wp.media({
+                        title: '<?php esc_html_e('Select Property Images', 'property-manager-pro'); ?>',
+                        button: {
+                            text: '<?php esc_html_e('Add to Property', 'property-manager-pro'); ?>'
+                        },
+                        multiple: true,
+                        library: {
+                            type: 'image'
                         }
-                        
-                        propertyImages.push(attachment.id);
-                        
-                        // Add to gallery
-                        var imageHtml = '<div class="property-image-item" data-attachment-id="' + attachment.id + '">' +
-                                        '<img src="' + attachment.url + '" alt="">' +
-                                        '<button type="button" class="remove-image" title="<?php esc_attr_e('Remove', 'property-manager-pro'); ?>">×</button>' +
-                                        '</div>';
-                        
-                        $('#property-images-container').append(imageHtml);
                     });
+                
+                    mediaFrame.on('select', function() {
+                        var selection = mediaFrame.state().get('selection');
                     
+                        selection.map(function(attachment) {
+                            attachment = attachment.toJSON();
+                        
+                            // Check if already added
+                            if (propertyImages.indexOf(attachment.id) !== -1) {
+                                return;
+                            }
+                        
+                            propertyImages.push(attachment.id);
+                        
+                            // Add to gallery
+                            var imageHtml = '<div class="property-image-item" data-attachment-id="' + attachment.id + '">' +
+                                            '<img src="' + attachment.url + '" alt="">' +
+                                            '<button type="button" class="remove-image" title="<?php esc_attr_e('Remove', 'property-manager-pro'); ?>">×</button>' +
+                                            '</div>';
+                        
+                            $('#property-images-container').append(imageHtml);
+                        });
+                    
+                        updateImagesField();
+                    });
+                
+                    mediaFrame.open();
+                });
+            
+                // Remove image
+                $(document).on('click', '.remove-image', function() {
+                    var item = $(this).closest('.property-image-item');
+                    var attachmentId = parseInt(item.data('attachment-id'));
+                
+                    var index = propertyImages.indexOf(attachmentId);
+                    if (index > -1) {
+                        propertyImages.splice(index, 1);
+                    }
+                
+                    item.remove();
                     updateImagesField();
                 });
-                
-                mediaFrame.open();
-            });
             
-            // Remove image
-            $(document).on('click', '.remove-image', function() {
-                var item = $(this).closest('.property-image-item');
-                var attachmentId = parseInt(item.data('attachment-id'));
-                
-                var index = propertyImages.indexOf(attachmentId);
-                if (index > -1) {
-                    propertyImages.splice(index, 1);
+                // Make images sortable
+                if ($.fn.sortable) {
+                    $('#property-images-container').sortable({
+                        items: '.property-image-item',
+                        cursor: 'move',
+                        opacity: 0.6,
+                        update: function() {
+                            // Update array order
+                            propertyImages = [];
+                            $('#property-images-container .property-image-item').each(function() {
+                                propertyImages.push(parseInt($(this).data('attachment-id')));
+                            });
+                            updateImagesField();
+                        }
+                    });
                 }
-                
-                item.remove();
-                updateImagesField();
-            });
             
-            // Make images sortable
-            if ($.fn.sortable) {
-                $('#property-images-container').sortable({
-                    items: '.property-image-item',
-                    cursor: 'move',
-                    opacity: 0.6,
-                    update: function() {
-                        // Update array order
-                        propertyImages = [];
-                        $('#property-images-container .property-image-item').each(function() {
-                            propertyImages.push(parseInt($(this).data('attachment-id')));
-                        });
-                        updateImagesField();
+                // ====================
+                // LEAFLET MAP
+                // ====================
+            
+                var lat = parseFloat($('#latitude').val()) || 37.8724;
+                var lng = parseFloat($('#longitude').val()) || -0.7959;
+            
+                // Initialize map
+                var map = L.map('property-map').setView([lat, lng], 13);
+            
+                // Add OpenStreetMap tiles
+                L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+                    attribution: '© OpenStreetMap contributors',
+                    maxZoom: 19
+                }).addTo(map);
+            
+                // Add marker
+                var marker = L.marker([lat, lng], {
+                    draggable: true
+                }).addTo(map);
+            
+                // Update coordinates when marker is dragged
+                marker.on('dragend', function(e) {
+                    var position = marker.getLatLng();
+                    $('#latitude').val(position.lat.toFixed(6));
+                    $('#longitude').val(position.lng.toFixed(6));
+                });
+            
+                // Update marker when clicking on map
+                map.on('click', function(e) {
+                    marker.setLatLng(e.latlng);
+                    $('#latitude').val(e.latlng.lat.toFixed(6));
+                    $('#longitude').val(e.latlng.lng.toFixed(6));
+                });
+            
+                // Update map when coordinates are entered manually
+                $('#update-map-btn').on('click', function() {
+                    var newLat = parseFloat($('#latitude').val());
+                    var newLng = parseFloat($('#longitude').val());
+                
+                    if (!isNaN(newLat) && !isNaN(newLng)) {
+                        marker.setLatLng([newLat, newLng]);
+                        map.setView([newLat, newLng], 13);
+                    } else {
+                        alert('<?php esc_html_e('Please enter valid coordinates.', 'property-manager-pro'); ?>');
                     }
                 });
-            }
             
-            // ====================
-            // LEAFLET MAP
-            // ====================
-            
-            var lat = parseFloat($('#latitude').val()) || 37.8724;
-            var lng = parseFloat($('#longitude').val()) || -0.7959;
-            
-            // Initialize map
-            var map = L.map('property-map').setView([lat, lng], 13);
-            
-            // Add OpenStreetMap tiles
-            L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-                attribution: '© OpenStreetMap contributors',
-                maxZoom: 19
-            }).addTo(map);
-            
-            // Add marker
-            var marker = L.marker([lat, lng], {
-                draggable: true
-            }).addTo(map);
-            
-            // Update coordinates when marker is dragged
-            marker.on('dragend', function(e) {
-                var position = marker.getLatLng();
-                $('#latitude').val(position.lat.toFixed(6));
-                $('#longitude').val(position.lng.toFixed(6));
-            });
-            
-            // Update marker when clicking on map
-            map.on('click', function(e) {
-                marker.setLatLng(e.latlng);
-                $('#latitude').val(e.latlng.lat.toFixed(6));
-                $('#longitude').val(e.latlng.lng.toFixed(6));
-            });
-            
-            // Update map when coordinates are entered manually
-            $('#update-map-btn').on('click', function() {
-                var newLat = parseFloat($('#latitude').val());
-                var newLng = parseFloat($('#longitude').val());
+                // Also update map when latitude/longitude inputs change
+                $('#latitude, #longitude').on('change', function() {
+                    var newLat = parseFloat($('#latitude').val());
+                    var newLng = parseFloat($('#longitude').val());
                 
-                if (!isNaN(newLat) && !isNaN(newLng)) {
-                    marker.setLatLng([newLat, newLng]);
-                    map.setView([newLat, newLng], 13);
-                } else {
-                    alert('<?php esc_html_e('Please enter valid coordinates.', 'property-manager-pro'); ?>');
-                }
-            });
+                    if (!isNaN(newLat) && !isNaN(newLng)) {
+                        marker.setLatLng([newLat, newLng]);
+                        map.setView([newLat, newLng]);
+                    }
+                });
             
-            // Also update map when latitude/longitude inputs change
-            $('#latitude, #longitude').on('change', function() {
-                var newLat = parseFloat($('#latitude').val());
-                var newLng = parseFloat($('#longitude').val());
-                
-                if (!isNaN(newLat) && !isNaN(newLng)) {
-                    marker.setLatLng([newLat, newLng]);
-                    map.setView([newLat, newLng]);
-                }
+                // Initialize images field on load
+                updateImagesField();
             });
-            
-            // Initialize images field on load
-            updateImagesField();
-        });
         </script>
         <?php
     }

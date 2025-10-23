@@ -411,3 +411,16 @@ html {
     height: 1rem;
     border-width: 0.15em;
 }
+
+.favorite-btn.favorited .dashicons-heart,
+.favorited .dashicons-heart {
+    color: #dc3545 !important;
+}
+
+.favorite-property-card {
+    transition: all 0.3s ease;
+}
+
+.property-notification {
+    box-shadow: 0 4px 12px rgba(0,0,0,0.2);
+}

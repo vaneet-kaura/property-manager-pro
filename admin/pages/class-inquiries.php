@@ -44,7 +44,7 @@ class PropertyManager_Admin_Inquiries {
         $properties_table = PropertyManager_Database::get_table_name('properties');
         
         // Handle status update with NONCE verification - SECURITY FIX
-        if (isset($_POST['update_status']) && check_admin_referer('update_inquiry_status', 'inquiry_nonce')) {
+        if (isset($_POST['status']) && check_admin_referer('update_inquiry_status', 'inquiry_nonce')) {
             $inquiry_id = intval($_POST['inquiry_id']);
             $status = sanitize_text_field($_POST['status']);
             
@@ -232,9 +232,12 @@ class PropertyManager_Admin_Inquiries {
                 <table class="wp-list-table widefat fixed striped">
                     <thead>
                         <tr>
-                            <th scope="col" class="manage-column column-cb check-column">
-                                <input type="checkbox" id="cb-select-all">
-                            </th>
+                            <td class="manage-column column-cb check-column">
+                                <label class="screen-reader-text" for="cb-select-all-1">
+                                    <?php esc_html_e('Select All', 'property-manager-pro'); ?>
+                                </label>
+                                <input id="cb-select-all-1" type="checkbox">
+                            </td>
                             <th scope="col"><?php esc_html_e('Property', 'property-manager-pro'); ?></th>
                             <th scope="col"><?php esc_html_e('Contact', 'property-manager-pro'); ?></th>
                             <th scope="col"><?php esc_html_e('Message', 'property-manager-pro'); ?></th>
@@ -366,68 +369,6 @@ class PropertyManager_Admin_Inquiries {
                     </div>
                 </div>
             <?php endif; ?>
-            
-            <style>
-                .status-badge {
-                    display: inline-block;
-                    padding: 4px 10px;
-                    border-radius: 3px;
-                    font-size: 12px;
-                    font-weight: 600;
-                }
-                .status-new {
-                    background: #ffebcd;
-                    color: #c87800;
-                }
-                .status-read {
-                    background: #e0f2ff;
-                    color: #0073aa;
-                }
-                .status-replied {
-                    background: #d4edda;
-                    color: #155724;
-                }
-                .inquiry-stat {
-                    margin-right: 10px;
-                }
-                .full-message {
-                    animation: slideDown 0.3s ease-out;
-                }
-                @keyframes slideDown {
-                    from {
-                        opacity: 0;
-                        max-height: 0;
-                    }
-                    to {
-                        opacity: 1;
-                        max-height: 500px;
-                    }
-                }
-            </style>
-            
-            <script>
-            jQuery(document).ready(function($) {
-                // Select all checkbox
-                $('#cb-select-all').on('change', function() {
-                    $('input[name="inquiry_ids[]"]').prop('checked', this.checked);
-                });
-                
-                // Show full message toggle
-                $('.show-full-message').on('click', function(e) {
-                    e.preventDefault();
-                    var inquiryId = $(this).data('inquiry-id');
-                    var fullMessage = $('#full-message-' + inquiryId);
-                    
-                    if (fullMessage.is(':visible')) {
-                        fullMessage.slideUp();
-                        $(this).text('<?php echo esc_js(__('Show full message', 'property-manager-pro')); ?>');
-                    } else {
-                        fullMessage.slideDown();
-                        $(this).text('<?php echo esc_js(__('Hide full message', 'property-manager-pro')); ?>');
-                    }
-                });
-            });
-            </script>
         </div>
         <?php
     }

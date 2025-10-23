@@ -61,6 +61,7 @@ class PropertyManager_Admin {
      */
     private function load_admin_pages() {
         require_once PROPERTY_MANAGER_PLUGIN_PATH . 'admin/pages/class-dashboard.php';
+        require_once PROPERTY_MANAGER_PLUGIN_PATH . 'admin/pages/class-import.php';
         require_once PROPERTY_MANAGER_PLUGIN_PATH . 'admin/pages/class-properties.php';
         require_once PROPERTY_MANAGER_PLUGIN_PATH . 'admin/pages/class-property-edit.php';
         require_once PROPERTY_MANAGER_PLUGIN_PATH . 'admin/pages/class-images.php';
@@ -71,6 +72,7 @@ class PropertyManager_Admin {
 
     private function init_components() {
         PropertyManager_Admin_Dashboard::get_instance();
+        PropertyManager_Admin_Import::get_instance();
         PropertyManager_Admin_Properties::get_instance();
         PropertyManager_Admin_Property_Edit::get_instance();
         PropertyManager_Admin_Images::get_instance();
@@ -145,14 +147,14 @@ class PropertyManager_Admin {
         );
         
         // Property Alerts
-        add_submenu_page(
+        /*add_submenu_page(
             'property-manager',
             __('Property Alerts', 'property-manager-pro'),
             __('Alerts', 'property-manager-pro'),
             'manage_options',
             'property-manager-alerts',
             array($this, 'alerts_page')
-        );
+        );*/
         
         // Inquiries
         add_submenu_page(
@@ -285,13 +287,13 @@ class PropertyManager_Admin {
             'property_manager_email'
         );
         
-        add_settings_field(
+        /*add_settings_field(
             'email_verification_required',
             __('Email Verification Required', 'property-manager-pro'),
             array($this, 'field_email_verification'),
             'property-manager-settings',
             'property_manager_email'
-        );
+        );*/
         
         // Map Settings Section
         add_settings_section(
@@ -1155,100 +1157,8 @@ class PropertyManager_Admin {
             wp_die(__('You do not have sufficient permissions to access this page.', 'property-manager-pro'));
         }
         
-        $importer = PropertyManager_FeedImporter::get_instance();
-        $import_stats = $importer->get_import_stats(10);
-        
-        ?>
-        <div class="wrap">
-            <h1><?php esc_html_e('Import Feed', 'property-manager-pro'); ?></h1>
-            
-            <div class="card" style="max-width: 1200px;">
-                <h2><?php esc_html_e('Manual Import', 'property-manager-pro'); ?></h2>
-                <p><?php esc_html_e('Click the button below to manually import properties from your Kyero feed.', 'property-manager-pro'); ?></p>
-                
-                <button type="button" class="button button-primary" id="start-import" data-nonce="<?php echo esc_attr(wp_create_nonce('property_manager_admin_nonce')); ?>">
-                    <span class="dashicons dashicons-download" style="margin-top: 3px;"></span>
-                    <?php esc_html_e('Start Import', 'property-manager-pro'); ?>
-                </button>
-                
-                <div id="import-result" style="margin-top: 20px;"></div>
-            </div>
-            
-            <?php if (!empty($import_stats)): ?>
-                <div class="card" style="max-width: 1200px; margin-top: 20px;">
-                    <h2><?php esc_html_e('Recent Imports', 'property-manager-pro'); ?></h2>
-                    <table class="wp-list-table widefat fixed striped">
-                        <thead>
-                            <tr>
-                                <th><?php esc_html_e('Date', 'property-manager-pro'); ?></th>
-                                <th><?php esc_html_e('Status', 'property-manager-pro'); ?></th>
-                                <th><?php esc_html_e('Imported', 'property-manager-pro'); ?></th>
-                                <th><?php esc_html_e('Updated', 'property-manager-pro'); ?></th>
-                                <th><?php esc_html_e('Failed', 'property-manager-pro'); ?></th>
-                                <th><?php esc_html_e('Deactivated', 'property-manager-pro'); ?></th>
-                            </tr>
-                        </thead>
-                        <tbody>
-                            <?php foreach ($import_stats as $stat): ?>
-                                <tr>
-                                    <td><?php echo esc_html(date_i18n(get_option('date_format') . ' ' . get_option('time_format'), strtotime($stat->started_at))); ?></td>
-                                    <td>
-                                        <span class="status-<?php echo esc_attr($stat->status); ?>">
-                                            <?php echo esc_html(ucfirst($stat->status)); ?>
-                                        </span>
-                                    </td>
-                                    <td><?php echo absint($stat->properties_imported); ?></td>
-                                    <td><?php echo absint($stat->properties_updated); ?></td>
-                                    <td><?php echo absint($stat->properties_failed); ?></td>
-                                    <td><?php echo absint($stat->properties_deactivated); ?></td>
-                                </tr>
-                            <?php endforeach; ?>
-                        </tbody>
-                    </table>
-                </div>
-            <?php endif; ?>
-        </div>
-        
-        <script>
-        jQuery(document).ready(function($) {
-            $('#start-import').on('click', function() {
-                var btn = $(this);
-                var nonce = btn.data('nonce');
-                
-                if (!confirm('<?php echo esc_js(__('Start property import?', 'property-manager-pro')); ?>')) {
-                    return;
-                }
-                
-                btn.prop('disabled', true);
-                $('#import-progress').show();
-                $('#import-result').html('');
-                
-                $.ajax({
-                    url: ajaxurl,
-                    type: 'POST',
-                    data: {
-                        action: 'property_manager_import_feed',
-                        nonce: nonce
-                    },
-                    success: function(response) {
-                        if (response.success) {
-                            $('#import-result').html('<div class="notice notice-success"><p>' + response.data.message + '</p></div>');
-                        } else {
-                            $('#import-result').html('<div class="notice notice-error"><p>' + response.data.message + '</p></div>');
-                        }
-                    },
-                    error: function() {
-                        $('#import-result').html('<div class="notice notice-error"><p><?php echo esc_js(__('An error occurred.', 'property-manager-pro')); ?></p></div>');
-                    },
-                    complete: function() {
-                        btn.prop('disabled', false);
-                        $('#import-progress').hide();
-                    }
-                });
-            });
-        });
-        </script>
-        <?php
+        $importer = PropertyManager_Admin_Import::get_instance();
+        $importer->render();
     }
     
     public function alerts_page() {

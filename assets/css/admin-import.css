@@ -108,7 +108,7 @@
     display: inline-flex;
     align-items: center;
     gap: 8px;
-    padding: 12px 24px;
+    padding: 0px 10px;
     font-size: 16px;
 }
 
@@ -331,6 +331,10 @@
 
     .result-item.updated {
         color: #2271b1;
+    }
+
+    .result-item.deactivated {
+        color: #b57400;
     }
 
     .result-item.failed {

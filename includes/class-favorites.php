@@ -26,12 +26,6 @@ class PropertyManager_Favorites {
         add_action('wp_ajax_nopriv_toggle_property_favorite', array($this, 'ajax_toggle_favorite'));
         add_action('wp_ajax_remove_property_favorite', array($this, 'ajax_remove_favorite'));
         add_action('wp_ajax_get_user_favorites', array($this, 'ajax_get_user_favorites'));
-    
-        add_action('init', array($this, 'init_hooks'));
-    }
-
-    public function init_hooks() {
-        add_action('wp_footer', array($this, 'add_favorites_javascript'));
     }
 
     public function toggle_favorite($property_id, $user_id = null) {
@@ -437,8 +431,7 @@ class PropertyManager_Favorites {
                     <div class="property-actions mt-3">
                         <a href="<?php echo esc_url($property_url); ?>" class="btn btn-primary btn-sm">
                             <?php _e('View Details', 'property-manager-pro'); ?>
-                        </a>
-                    
+                        </a>                    
                         <button type="button" class="btn btn-outline-secondary btn-sm share-btn" 
                                 data-property-id="<?php echo absint($property->id); ?>">
                             <span class="dashicons dashicons-share"></span>
@@ -448,167 +441,6 @@ class PropertyManager_Favorites {
                 </div>
             </div>
         </div>
-        <?php
-    }
-
-    public function add_favorites_javascript() {
-        if (!wp_script_is('property-manager-script', 'enqueued')) {
-            return;
-        }
-        ?>
-        <script>
-        document.addEventListener('DOMContentLoaded', function() {
-            document.addEventListener('click', function(e) {
-                if (e.target.closest('.favorite-btn')) {
-                    e.preventDefault();
-                    handleFavoriteToggle(e.target.closest('.favorite-btn'));
-                }
-            
-                if (e.target.closest('.remove-favorite-btn')) {
-                    e.preventDefault();
-                    handleFavoriteRemove(e.target.closest('.remove-favorite-btn'));
-                }
-            });
-        
-            function handleFavoriteToggle(btn) {
-                var propertyId = btn.getAttribute('data-property-id');
-                var heartIcon = btn.querySelector('.dashicons-heart');
-            
-                if (!propertyId) return;
-            
-                btn.disabled = true;
-            
-                fetch(property_manager_ajax.ajax_url, {
-                    method: 'POST',
-                    headers: {'Content-Type': 'application/x-www-form-urlencoded'},
-                    body: new URLSearchParams({
-                        action: 'toggle_property_favorite',
-                        property_id: propertyId,
-                        nonce: property_manager_ajax.nonce
-                    })
-                })
-                .then(response => response.json())
-                .then(data => {
-                    if (data.success) {
-                        if (data.data.is_favorite) {
-                            heartIcon.classList.add('favorited');
-                            btn.classList.add('favorited');
-                        } else {
-                            heartIcon.classList.remove('favorited');
-                            btn.classList.remove('favorited');
-                        }
-                        showNotification(data.data.message, 'success');
-                    } else {
-                        if (data.data && data.data.login_required) {
-                            if (confirm('<?php esc_js(_e('You need to be logged in to save favorites. Would you like to login now?', 'property-manager-pro')); ?>')) {
-                                window.location.href = '<?php echo wp_login_url(); ?>';
-                            }
-                        } else {
-                            showNotification(data.data ? data.data.message : 'Error occurred', 'error');
-                        }
-                    }
-                })
-                .catch(error => showNotification('An error occurred. Please try again.', 'error'))
-                .finally(() => { btn.disabled = false; });
-            }
-        
-            function handleFavoriteRemove(btn) {
-                var propertyId = btn.getAttribute('data-property-id');
-                var propertyCard = btn.closest('.favorite-property-card');
-            
-                if (!propertyId) return;
-            
-                if (!confirm('<?php esc_js(_e('Are you sure you want to remove this property from your favorites?', 'property-manager-pro')); ?>')) {
-                    return;
-                }
-            
-                btn.disabled = true;
-            
-                fetch(property_manager_ajax.ajax_url, {
-                    method: 'POST',
-                    headers: {'Content-Type': 'application/x-www-form-urlencoded'},
-                    body: new URLSearchParams({
-                        action: 'remove_property_favorite',
-                        property_id: propertyId,
-                        nonce: property_manager_ajax.nonce
-                    })
-                })
-                .then(response => response.json())
-                .then(data => {
-                    if (data.success) {
-                        if (propertyCard) {
-                            propertyCard.style.transition = 'opacity 0.3s ease, transform 0.3s ease';
-                            propertyCard.style.opacity = '0';
-                            propertyCard.style.transform = 'scale(0.95)';
-                        
-                            setTimeout(() => {
-                                var col = propertyCard.closest('.col-lg-4, .col-md-6, .col-12');
-                                if (col) { col.remove(); } else { propertyCard.remove(); }
-                            }, 300);
-                        }
-                        showNotification(data.data.message, 'success');
-                    } else {
-                        showNotification(data.data ? data.data.message : 'Error occurred', 'error');
-                    }
-                })
-                .catch(error => showNotification('An error occurred. Please try again.', 'error'))
-                .finally(() => { btn.disabled = false; });
-            }
-        
-            function showNotification(message, type) {
-                var notification = document.createElement('div');
-                notification.className = 'property-notification ' + type;
-                notification.textContent = message;
-            
-                Object.assign(notification.style, {
-                    position: 'fixed',
-                    top: '20px',
-                    right: '20px',
-                    padding: '15px 20px',
-                    borderRadius: '5px',
-                    color: 'white',
-                    fontWeight: 'bold',
-                    zIndex: '9999',
-                    opacity: '0',
-                    transform: 'translateY(-20px)',
-                    transition: 'all 0.3s ease',
-                    backgroundColor: type === 'success' ? '#28a745' : '#dc3545'
-                });
-            
-                document.body.appendChild(notification);
-            
-                setTimeout(() => {
-                    notification.style.opacity = '1';
-                    notification.style.transform = 'translateY(0)';
-                }, 100);
-            
-                setTimeout(() => {
-                    notification.style.opacity = '0';
-                    notification.style.transform = 'translateY(-20px)';
-                    setTimeout(() => {
-                        if (notification.parentNode) {
-                            notification.parentNode.removeChild(notification);
-                        }
-                    }, 300);
-                }, 3000);
-            }
-        });
-        </script>
-    
-        <style>
-        .favorite-btn.favorited .dashicons-heart,
-        .favorited .dashicons-heart {
-            color: #dc3545 !important;
-        }
-    
-        .favorite-property-card {
-            transition: all 0.3s ease;
-        }
-    
-        .property-notification {
-            box-shadow: 0 4px 12px rgba(0,0,0,0.2);
-        }
-        </style>
         <?php
     }
 }

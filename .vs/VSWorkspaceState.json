@@ -3,12 +3,10 @@
     "",
     "\\admin",
     "\\admin\\pages",
-    "\\assets",
     "\\assets\\css",
     "\\assets\\js",
-    "\\includes",
-    "\\public"
+    "\\includes"
   ],
-  "SelectedNode": "\\property-manager-pro.php",
+  "SelectedNode": "\\includes\\class-feed-importer.php",
   "PreviewInSolutionExplorer": false
 }

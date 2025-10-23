@@ -22,9 +22,6 @@ class PropertyManager_Admin_Import {
     }
     
     private function __construct() {
-        // Register AJAX handlers
-        add_action('wp_ajax_property_manager_import_feed', array($this, 'ajax_import_feed'));
-        
         // Enqueue scripts and styles for this page
         add_action('admin_enqueue_scripts', array($this, 'enqueue_scripts'));
     }
@@ -61,7 +58,7 @@ class PropertyManager_Admin_Import {
             'propertyManagerImport',
             array(
                 'ajaxUrl' => admin_url('admin-ajax.php'),
-                'nonce' => wp_create_nonce('property_manager_import'),
+                'nonce' => wp_create_nonce('property_manager_admin_nonce'),
                 'i18n' => array(
                     'importing' => __('Importing properties...', 'property-manager-pro'),
                     'success' => __('Import completed successfully!', 'property-manager-pro'),
@@ -238,6 +235,12 @@ class PropertyManager_Admin_Import {
                                                 absint($import->properties_updated)
                                             ); ?>
                                         </span>
+                                        <span class="result-item deactivated">
+                                            <?php printf(
+                                                esc_html__('Deactivated: %d', 'property-manager-pro'),
+                                                absint($import->properties_deactivated)
+                                            ); ?>
+                                        </span>
                                         <?php if ($import->properties_failed > 0): ?>
                                         <span class="result-item failed">
                                             <?php printf(
@@ -261,156 +264,6 @@ class PropertyManager_Admin_Import {
                 </table>
             </div>
             <?php endif; ?>
-            
-            <style>
-                .property-manager-import-page .import-statistics {
-                    margin: 20px 0;
-                }
-                .stats-grid {
-                    display: grid;
-                    grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
-                    gap: 20px;
-                    margin: 20px 0;
-                }
-                .stat-box {
-                    background: #fff;
-                    border: 1px solid #ccd0d4;
-                    border-radius: 4px;
-                    padding: 20px;
-                    text-align: center;
-                }
-                .stat-number {
-                    font-size: 32px;
-                    font-weight: bold;
-                    color: #2271b1;
-                }
-                .stat-box.success .stat-number {
-                    color: #00a32a;
-                }
-                .stat-box.failed .stat-number {
-                    color: #d63638;
-                }
-                .stat-label {
-                    margin-top: 8px;
-                    color: #646970;
-                }
-                .import-actions-card {
-                    background: #fff;
-                    border: 1px solid #ccd0d4;
-                    border-radius: 4px;
-                    padding: 20px;
-                    margin: 20px 0;
-                }
-                .feed-info {
-                    margin: 15px 0;
-                    padding: 10px;
-                    background: #f0f0f1;
-                    border-radius: 4px;
-                }
-                .feed-info code {
-                    background: #fff;
-                    padding: 2px 6px;
-                    border-radius: 2px;
-                }
-                .import-controls {
-                    margin: 20px 0;
-                }
-                .button-hero .dashicons {
-                    line-height: 32px;
-                }
-                .import-progress {
-                    margin: 20px 0;
-                    padding: 20px;
-                    background: #f0f6fc;
-                    border: 1px solid #c3e0f5;
-                    border-radius: 4px;
-                }
-                .progress-info {
-                    display: flex;
-                    align-items: center;
-                    gap: 10px;
-                    margin-bottom: 10px;
-                }
-                .progress-info .dashicons.spin {
-                    animation: rotation 2s infinite linear;
-                }
-                @keyframes rotation {
-                    from { transform: rotate(0deg); }
-                    to { transform: rotate(359deg); }
-                }
-                .progress-bar {
-                    height: 20px;
-                    background: #fff;
-                    border: 1px solid #c3e0f5;
-                    border-radius: 10px;
-                    overflow: hidden;
-                }
-                .progress-fill {
-                    height: 100%;
-                    background: #2271b1;
-                    transition: width 0.3s ease;
-                }
-                .import-results {
-                    margin: 20px 0;
-                    padding: 15px;
-                    border-radius: 4px;
-                }
-                .import-results.success {
-                    background: #d5f4e6;
-                    border: 1px solid #00a32a;
-                }
-                .import-results.error {
-                    background: #fcf0f1;
-                    border: 1px solid #d63638;
-                }
-                .status-badge {
-                    padding: 4px 12px;
-                    border-radius: 12px;
-                    font-size: 12px;
-                    font-weight: 500;
-                    text-transform: uppercase;
-                }
-                .status-badge.status-completed {
-                    background: #d5f4e6;
-                    color: #00a32a;
-                }
-                .status-badge.status-failed {
-                    background: #fcf0f1;
-                    color: #d63638;
-                }
-                .status-badge.status-started {
-                    background: #f0f6fc;
-                    color: #2271b1;
-                }
-                .import-results-summary {
-                    display: flex;
-                    gap: 15px;
-                    flex-wrap: wrap;
-                }
-                .result-item {
-                    font-size: 13px;
-                }
-                .result-item.imported {
-                    color: #00a32a;
-                }
-                .result-item.updated {
-                    color: #2271b1;
-                }
-                .result-item.failed {
-                    color: #d63638;
-                }
-                .error-message {
-                    color: #d63638;
-                    font-size: 13px;
-                }
-                .error-text {
-                    color: #d63638;
-                    font-weight: 500;
-                }
-                .recent-imports-section {
-                    margin-top: 30px;
-                }
-            </style>
         </div>
         <?php
     }
@@ -425,8 +278,8 @@ class PropertyManager_Admin_Import {
         $stats = $wpdb->get_row("
             SELECT 
                 COUNT(*) as total_imports,
-                SUM(CASE WHEN status = 'completed' THEN 1 ELSE 0 END) as successful_imports,
-                SUM(CASE WHEN status = 'failed' THEN 1 ELSE 0 END) as failed_imports,
+                IFNULL(SUM(CASE WHEN status = 'completed' THEN 1 ELSE 0 END),0) as successful_imports,
+                IFNULL(SUM(CASE WHEN status = 'failed' THEN 1 ELSE 0 END),0) as failed_imports,
                 MAX(started_at) as last_import
             FROM $table
             WHERE import_type = 'kyero_feed'
@@ -454,53 +307,5 @@ class PropertyManager_Admin_Import {
             ORDER BY started_at DESC
             LIMIT %d
         ", $limit));
-    }
-    
-    /**
-     * AJAX handler for feed import
-     */
-    public function ajax_import_feed() {
-        // SECURITY: Verify nonce
-        check_ajax_referer('property_manager_import', 'nonce');
-        
-        // SECURITY: Check capabilities
-        if (!current_user_can('manage_options')) {
-            wp_send_json_error(array(
-                'message' => __('You do not have sufficient permissions to perform this action.', 'property-manager-pro')
-            ));
-        }
-        
-        // Check if import is already in progress
-        if (get_transient('property_manager_import_in_progress')) {
-            wp_send_json_error(array(
-                'message' => __('An import is already in progress. Please wait for it to complete.', 'property-manager-pro')
-            ));
-        }
-        
-        // Get importer instance and run import
-        $importer = PropertyManager_FeedImporter::get_instance();
-        $result = $importer->import_feed(true);
-        
-        if ($result && is_array($result)) {
-            wp_send_json_success(array(
-                'message' => sprintf(
-                    __('Import completed successfully! Imported: %d, Updated: %d, Failed: %d, Deactivated: %d', 'property-manager-pro'),
-                    absint($result['imported']),
-                    absint($result['updated']),
-                    absint($result['failed']),
-                    absint($result['deactivated'])
-                ),
-                'data' => array(
-                    'imported' => absint($result['imported']),
-                    'updated' => absint($result['updated']),
-                    'failed' => absint($result['failed']),
-                    'deactivated' => absint($result['deactivated'])
-                )
-            ));
-        } else {
-            wp_send_json_error(array(
-                'message' => __('Import failed. Please check the error logs for more details.', 'property-manager-pro')
-            ));
-        }
     }
 }

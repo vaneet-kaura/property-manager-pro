@@ -488,51 +488,168 @@ jQuery(document).ready(function ($) {
     window.PropertyMap = PropertyMap;
 })(jQuery);
 
-/*
-document.addEventListener('DOMContentLoaded', function() {
-        const favoriteBtn = document.querySelector('.btn-favorite');
-        if (!favoriteBtn) return;
-    
-        favoriteBtn.addEventListener('click', function() {
-            const propertyId = this.dataset.propertyId;
-            const nonce = this.dataset.nonce;
-            const icon = this.querySelector('i');
-            const text = this.querySelector('.favorite-text');
-            const isActive = this.classList.contains('active');
-        
-            this.disabled = true;
-        
-            const formData = new FormData();
-            formData.append('action', isActive ? 'remove_favorite' : 'add_favorite');
-            formData.append('property_id', propertyId);
-            formData.append('nonce', nonce);
-        
-            fetch('<?php echo esc_url(admin_url('admin-ajax.php')); ?>', {
-                method: 'POST',
-                body: formData
+
+
+document.addEventListener('DOMContentLoaded', function () {
+    document.addEventListener('click', function (e) {
+        if (e.target.closest('.favorite-btn')) {
+            e.preventDefault();
+            handleFavoriteToggle(e.target.closest('.favorite-btn'));
+        }
+
+        if (e.target.closest('.remove-favorite-btn')) {
+            e.preventDefault();
+            handleFavoriteRemove(e.target.closest('.remove-favorite-btn'));
+        }
+    });
+
+    function handleFavoriteToggle(btn) {
+        var propertyId = btn.getAttribute('data-property-id');
+        var heartIcon = btn.querySelector('.dashicons-heart');
+
+        if (!propertyId) return;
+
+        btn.disabled = true;
+
+        fetch(property_manager_ajax.ajax_url, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+            body: new URLSearchParams({
+                action: 'toggle_property_favorite',
+                property_id: propertyId,
+                nonce: property_manager_ajax.nonce
             })
+        })
             .then(response => response.json())
             .then(data => {
                 if (data.success) {
-                    if (isActive) {
-                        this.classList.remove('active');
-                        icon.classList.remove('bi-heart-fill');
-                        icon.classList.add('bi-heart');
-                        text.textContent = '<?php esc_html_e('Save', 'property-manager-pro'); ?>';
+                    if (data.data.is_favorite) {
+                        heartIcon.classList.add('favorited');
+                        btn.classList.add('favorited');
                     } else {
-                        this.classList.add('active');
-                        icon.classList.remove('bi-heart');
-                        icon.classList.add('bi-heart-fill');
-                        text.textContent = '<?php esc_html_e('Saved', 'property-manager-pro'); ?>';
+                        heartIcon.classList.remove('favorited');
+                        btn.classList.remove('favorited');
+                    }
+                    showNotification(data.data.message, 'success');
+                } else {
+                    if (data.data && data.data.login_required) {
+                        if (confirm('<?php esc_js(_e('You need to be logged in to save favorites.Would you like to login now ? ', 'property - manager - pro')); ?>')) {
+                            window.location.href = '<?php echo wp_login_url(); ?>';
+                        }
+                    } else {
+                        showNotification(data.data ? data.data.message : 'Error occurred', 'error');
                     }
                 }
             })
-            .catch(error => {
-                console.error('Error:', error);
+            .catch(error => showNotification('An error occurred. Please try again.', 'error'))
+            .finally(() => { btn.disabled = false; });
+    }
+
+    function handleFavoriteRemove(btn) {
+        var propertyId = btn.getAttribute('data-property-id');
+        var propertyCard = btn.closest('.favorite-property-card');
+
+        if (!propertyId) return;
+
+        if (!confirm('<?php esc_js(_e('Are you sure you want to remove this property from your favorites ? ', 'property - manager - pro')); ?>')) {
+            return;
+        }
+
+        btn.disabled = true;
+
+        fetch(property_manager_ajax.ajax_url, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+            body: new URLSearchParams({
+                action: 'remove_property_favorite',
+                property_id: propertyId,
+                nonce: property_manager_ajax.nonce
             })
-            .finally(() => {
-                this.disabled = false;
-            });
+        })
+            .then(response => response.json())
+            .then(data => {
+                if (data.success) {
+                    if (propertyCard) {
+                        propertyCard.style.transition = 'opacity 0.3s ease, transform 0.3s ease';
+                        propertyCard.style.opacity = '0';
+                        propertyCard.style.transform = 'scale(0.95)';
+
+                        setTimeout(() => {
+                            var col = propertyCard.closest('.col-lg-4, .col-md-6, .col-12');
+                            if (col) { col.remove(); } else { propertyCard.remove(); }
+                        }, 300);
+                    }
+                    showNotification(data.data.message, 'success');
+                } else {
+                    showNotification(data.data ? data.data.message : 'Error occurred', 'error');
+                }
+            })
+            .catch(error => showNotification('An error occurred. Please try again.', 'error'))
+            .finally(() => { btn.disabled = false; });
+    }
+
+    function showNotification(message, type) {
+        var notification = document.createElement('div');
+        notification.className = 'property-notification ' + type;
+        notification.textContent = message;
+
+        Object.assign(notification.style, {
+            position: 'fixed',
+            top: '20px',
+            right: '20px',
+            padding: '15px 20px',
+            borderRadius: '5px',
+            color: 'white',
+            fontWeight: 'bold',
+            zIndex: '9999',
+            opacity: '0',
+            transform: 'translateY(-20px)',
+            transition: 'all 0.3s ease',
+            backgroundColor: type === 'success' ? '#28a745' : '#dc3545'
         });
+
+        document.body.appendChild(notification);
+
+        setTimeout(() => {
+            notification.style.opacity = '1';
+            notification.style.transform = 'translateY(0)';
+        }, 100);
+
+        setTimeout(() => {
+            notification.style.opacity = '0';
+            notification.style.transform = 'translateY(-20px)';
+            setTimeout(() => {
+                if (notification.parentNode) {
+                    notification.parentNode.removeChild(notification);
+                }
+            }, 300);
+        }, 3000);
+    }
+});
+
+function removeFilter(key, value = null) {
+    var url = new URL(window.location);
+    if (value) {
+        // Handle array parameters
+        var values = url.searchParams.getAll(key + '[]');
+        values = values.filter(v => v !== value);
+        url.searchParams.delete(key + '[]');
+        values.forEach(v => url.searchParams.append(key + '[]', v));
+    } else {
+        url.searchParams.delete(key);
+    }
+    window.location = url.toString();
+}
+
+function clearAllFilters() {
+    var url = new URL(window.location);
+    // Keep only essential parameters
+    var keep = ['page_id', 'pagename'];
+    var newUrl = new URL(url.origin + url.pathname);
+    keep.forEach(param => {
+        if (url.searchParams.has(param)) {
+            newUrl.searchParams.set(param, url.searchParams.get(param));
+        }
     });
-*/
+    window.location = newUrl.toString();
+}

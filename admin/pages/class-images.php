@@ -295,51 +295,6 @@ class PropertyManager_Admin_Images {
                 </table>
             </div>
             <?php endif; ?>
-            
-            <style>
-                .image-stats-cards {
-                    display: grid;
-                    grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
-                    gap: 20px;
-                    margin: 20px 0;
-                }
-                .stats-card {
-                    background: #fff;
-                    border: 1px solid #ccd0d4;
-                    border-radius: 4px;
-                    padding: 20px;
-                    text-align: center;
-                }
-                .stats-number {
-                    font-size: 32px;
-                    font-weight: bold;
-                    color: #2271b1;
-                }
-                .stats-card.downloaded .stats-number {
-                    color: #00a32a;
-                }
-                .stats-card.pending .stats-number {
-                    color: #dba617;
-                }
-                .stats-card.failed .stats-number {
-                    color: #d63638;
-                }
-                .stats-label {
-                    margin-top: 8px;
-                    color: #646970;
-                }
-                .image-actions-section {
-                    background: #fff;
-                    border: 1px solid #ccd0d4;
-                    border-radius: 4px;
-                    padding: 20px;
-                    margin: 20px 0;
-                }
-                .error-message {
-                    color: #d63638;
-                    font-size: 0.9em;
-                }
-            </style>
         </div>
         <?php
     }

@@ -141,25 +141,6 @@ class PropertyManager_Admin_Settings {
             </div>
             <?php endif; ?>
         </div>
-        
-        <style>
-            .card {
-                background: #fff;
-                border: 1px solid #ccd0d4;
-                box-shadow: 0 1px 1px rgba(0,0,0,.04);
-                padding: 20px;
-                margin-bottom: 20px;
-            }
-            .card h2 {
-                margin-top: 0;
-                padding-bottom: 10px;
-                border-bottom: 1px solid #eee;
-            }
-            .notice.inline {
-                margin: 10px 0;
-                padding: 10px;
-            }
-        </style>
         <?php
     }
 }

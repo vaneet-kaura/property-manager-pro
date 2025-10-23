@@ -506,60 +506,6 @@ class PropertyManager_Admin_Properties {
                 <?php endif; ?>
             </form>
         </div>
-        
-        <style>
-            .column-thumbnail img,
-            .column-thumbnail div {
-                vertical-align: middle;
-            }
-            
-            .wp-list-table .column-cb {
-                width: 2.2em;
-            }
-            
-            .wp-list-table .column-thumbnail {
-                width: 80px;
-            }
-            
-            .wp-list-table .column-ref {
-                width: 120px;
-            }
-            
-            .wp-list-table .column-type {
-                width: 100px;
-            }
-            
-            .wp-list-table .column-beds,
-            .wp-list-table .column-baths {
-                width: 60px;
-                text-align: center;
-            }
-            
-            .wp-list-table .column-status {
-                width: 80px;
-            }
-            
-            .wp-list-table .column-date {
-                width: 100px;
-            }
-        </style>
-        
-        <script>
-        jQuery(document).ready(function($) {
-            // Select all checkboxes
-            $('#cb-select-all-1, #cb-select-all-2').on('change', function() {
-                var checked = $(this).prop('checked');
-                $('tbody input[type="checkbox"]').prop('checked', checked);
-            });
-            
-            // Update select all when individual checkboxes change
-            $('tbody input[type="checkbox"]').on('change', function() {
-                var total = $('tbody input[type="checkbox"]').length;
-                var checked = $('tbody input[type="checkbox"]:checked').length;
-                $('#cb-select-all-1, #cb-select-all-2').prop('checked', total === checked);
-            });
-        });
-        </script>
         <?php
     }
 }

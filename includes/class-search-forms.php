@@ -23,10 +23,6 @@ class PropertyManager_SearchForms {
     }
     
     private function __construct() {
-        add_action('wp_ajax_property_search_suggestions', array($this, 'ajax_search_suggestions'));
-        add_action('wp_ajax_nopriv_property_search_suggestions', array($this, 'ajax_search_suggestions'));
-        add_action('wp_ajax_property_get_locations', array($this, 'ajax_get_locations'));
-        add_action('wp_ajax_nopriv_property_get_locations', array($this, 'ajax_get_locations'));
     }
     
     
@@ -40,7 +36,7 @@ class PropertyManager_SearchForms {
             'action_url' => get_permalink(get_option('property_manager_pages')['property_search'] ?? ''),
             'method' => 'GET',
             'button_text' => __('Search Properties', 'property-manager-pro'),
-            'show_advanced_toggle' => false,
+            'show_advanced_button' => true,
             'form_id' => 'property-basic-search'
         );
         
@@ -127,7 +123,7 @@ class PropertyManager_SearchForms {
                 <!-- Search Buttons -->
                 <div class="row align-items-center">
                     <div class="col">
-                        <?php if (!$args['show_advanced_toggle']): ?>
+                        <?php if ($args['show_advanced_button']): ?>
 							<a href="<?php echo esc_url(get_permalink(get_option('property_manager_pages')['property_advanced_search'] ?? ''))?>">
 								<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 16 16" fill="none">
 								  <path d="M5.6 8.8H7.2V10.4C7.2 10.6122 7.28429 10.8157 7.43431 10.9657C7.58434 11.1157 7.78783 11.2 8 11.2C8.21217 11.2 8.41566 11.1157 8.56569 10.9657C8.71571 10.8157 8.8 10.6122 8.8 10.4V8.8H10.4C10.6122 8.8 10.8157 8.71571 10.9657 8.56569C11.1157 8.41566 11.2 8.21217 11.2 8C11.2 7.78783 11.1157 7.58434 10.9657 7.43431C10.8157 7.28429 10.6122 7.2 10.4 7.2H8.8V5.6C8.8 5.38783 8.71571 5.18434 8.56569 5.03431C8.41566 4.88429 8.21217 4.8 8 4.8C7.78783 4.8 7.58434 4.88429 7.43431 5.03431C7.28429 5.18434 7.2 5.38783 7.2 5.6V7.2H5.6C5.38783 7.2 5.18434 7.28429 5.03431 7.43431C4.88429 7.58434 4.8 7.78783 4.8 8C4.8 8.21217 4.88429 8.41566 5.03431 8.56569C5.18434 8.71571 5.38783 8.8 5.6 8.8ZM15.2 0H0.8C0.587827 0 0.384344 0.0842854 0.234315 0.234315C0.0842854 0.384344 0 0.587827 0 0.8V15.2C0 15.4122 0.0842854 15.6157 0.234315 15.7657C0.384344 15.9157 0.587827 16 0.8 16H15.2C15.4122 16 15.6157 15.9157 15.7657 15.7657C15.9157 15.6157 16 15.4122 16 15.2V0.8C16 0.587827 15.9157 0.384344 15.7657 0.234315C15.6157 0.0842854 15.4122 0 15.2 0ZM14.4 14.4H1.6V1.6H14.4V14.4Z" fill="#FA940C"/>
@@ -142,20 +138,6 @@ class PropertyManager_SearchForms {
                         </button>
                     </div>
                 </div>
-                
-                <?php if ($args['show_advanced_toggle']): ?>
-                    <div class="advanced-search-toggle">
-                        <button type="button" class="btn btn-link" data-bs-toggle="collapse" data-bs-target="#advanced-search-options" aria-expanded="false">
-                            <?php _e('Advanced Search Options', 'property-manager-pro'); ?>
-                            <i class="fas fa-chevron-down ms-2"></i>
-                        </button>
-                    </div>
-                    
-                    <div class="collapse" id="advanced-search-options">
-                        <?php echo $this->get_advanced_search_fields($current_values, $options); ?>
-                    </div>
-                <?php endif; ?>
-                
                 <?php wp_nonce_field('property_search', 'search_nonce'); ?>
             </form>
         </div>
@@ -688,139 +670,6 @@ class PropertyManager_SearchForms {
     }
     
     /**
-     * AJAX handler for location search suggestions
-     */
-    public function ajax_search_suggestions() {
-        check_ajax_referer('property_manager_nonce', 'nonce');
-        
-        $query = sanitize_text_field($_POST['query']);
-        
-        if (strlen($query) < 2) {
-            wp_send_json_error('Query too short');
-        }
-        
-        global $wpdb;
-        $properties_table = PropertyManager_Database::get_table_name('properties');
-        
-        // Search towns and provinces
-        $suggestions = $wpdb->get_results($wpdb->prepare("
-            SELECT DISTINCT CONCAT(town, ', ', province) as label, 
-                   CONCAT(town, ', ', province) as value
-            FROM $properties_table 
-            WHERE (town LIKE %s OR province LIKE %s)
-            AND town IS NOT NULL AND town != ''
-            AND province IS NOT NULL AND province != ''
-            ORDER BY 
-                CASE 
-                    WHEN town LIKE %s THEN 1
-                    WHEN province LIKE %s THEN 2
-                    ELSE 3
-                END,
-                town ASC
-            LIMIT 10
-        ", 
-        '%' . $query . '%', 
-        '%' . $query . '%',
-        $query . '%',
-        $query . '%'
-        ));
-        
-        $results = array();
-        foreach ($suggestions as $suggestion) {
-            $results[] = array(
-                'label' => $suggestion->label,
-                'value' => $suggestion->value
-            );
-        }
-        
-        wp_send_json_success($results);
-    }
-    
-    /**
-     * AJAX handler for getting locations (towns based on province)
-     */
-    public function ajax_get_locations() {
-        check_ajax_referer('property_search_locations', 'nonce');
-        
-        $province = sanitize_text_field($_POST['province']);
-        
-        if (empty($province)) {
-            wp_send_json_error('Province is required');
-        }
-        
-        global $wpdb;
-        $properties_table = PropertyManager_Database::get_table_name('properties');
-        
-        $towns = $wpdb->get_col($wpdb->prepare("
-            SELECT DISTINCT town 
-            FROM $properties_table 
-            WHERE province = %s
-            AND town IS NOT NULL AND town != ''
-            ORDER BY town ASC
-        ", $province));
-        
-        wp_send_json_success($towns);
-    }
-    
-    /**
-     * Generate quick search widget
-     */
-    public function get_quick_search_widget($args = array()) {
-        $defaults = array(
-            'title' => __('Quick Property Search', 'property-manager-pro'),
-            'form_id' => 'quick-search-widget'
-        );
-        
-        $args = wp_parse_args($args, $defaults);
-        
-        ob_start();
-        ?>
-        <div class="card">
-            <div class="card-header">
-                <h5 class="card-title mb-0"><?php echo esc_html($args['title']); ?></h5>
-            </div>
-            <div class="card-body">
-                <form method="GET" action="<?php echo esc_url(get_permalink(get_option('property_manager_pages')['property_search'] ?? '')); ?>" id="<?php echo esc_attr($args['form_id']); ?>">
-                    <div class="mb-3">
-                        <select class="form-select" id="town" name="town">
-                            <option value=""><?php _e('Any Town', 'property-manager-pro'); ?></option>
-                            <?php foreach ($options['towns'] as $province => $town): ?>
-                                <option value="<?php echo esc_attr($town); ?>">
-                                    <?php echo esc_html($town); ?>
-                                </option>
-                            <?php endforeach; ?>
-                        </select>
-                    </div>
-                    <div class="mb-3">
-                        <select class="form-select" name="property_type">
-                            <option value=""><?php _e('Property Type', 'property-manager-pro'); ?></option>
-                            <?php
-                            $options = $this->get_form_options();
-                            foreach ($options['property_types'] as $type):
-                            ?>
-                                <option value="<?php echo esc_attr($type); ?>"><?php echo esc_html($type); ?></option>
-                            <?php endforeach; ?>
-                        </select>
-                    </div>
-                    <div class="mb-3">
-                        <select class="form-select" name="price_freq">
-                            <option value=""><?php _e('Sale & Rent', 'property-manager-pro'); ?></option>
-                            <option value="sale"><?php _e('For Sale', 'property-manager-pro'); ?></option>
-                            <option value="rent"><?php _e('For Rent', 'property-manager-pro'); ?></option>
-                        </select>
-                    </div>
-                    <button type="submit" class="btn btn-primary w-100">
-                        <i class="fas fa-search me-2"></i><?php _e('Search', 'property-manager-pro'); ?>
-                    </button>
-                </form>
-            </div>
-        </div>
-        <?php
-        
-        return ob_get_clean();
-    }
-    
-    /**
      * Generate search results filter bar
      */
     public function get_search_filters_bar($current_search = array()) {
@@ -859,37 +708,7 @@ class PropertyManager_SearchForms {
                 </button>
             </div>
         </div>
-        
-        <script>
-        function removeFilter(key, value = null) {
-            var url = new URL(window.location);
-            if (value) {
-                // Handle array parameters
-                var values = url.searchParams.getAll(key + '[]');
-                values = values.filter(v => v !== value);
-                url.searchParams.delete(key + '[]');
-                values.forEach(v => url.searchParams.append(key + '[]', v));
-            } else {
-                url.searchParams.delete(key);
-            }
-            window.location = url.toString();
-        }
-        
-        function clearAllFilters() {
-            var url = new URL(window.location);
-            // Keep only essential parameters
-            var keep = ['page_id', 'pagename'];
-            var newUrl = new URL(url.origin + url.pathname);
-            keep.forEach(param => {
-                if (url.searchParams.has(param)) {
-                    newUrl.searchParams.set(param, url.searchParams.get(param));
-                }
-            });
-            window.location = newUrl.toString();
-        }
-        </script>
-        <?php
-        
+        <?php        
         return ob_get_clean();
     }
     

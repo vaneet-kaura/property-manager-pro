@@ -65,7 +65,7 @@ class PropertyManager_Shortcodes {
     public function render_basic_search_form($atts) {
         $atts = shortcode_atts(array(
             'show_title' => true,
-            'show_advanced_toggle' => false,
+            'show_advanced_button' => true,
             'title' => __('Search Properties', 'property-manager-pro'),
             'button_text' => __('Search', 'property-manager-pro'),
             'placeholder' => __('Location, Property Type...', 'property-manager-pro'),
@@ -77,7 +77,6 @@ class PropertyManager_Shortcodes {
         
         $search_forms = PropertyManager_SearchForms::get_instance();
         echo $search_forms->basic_search_form($atts);
-        
         return ob_get_clean();
     }
     

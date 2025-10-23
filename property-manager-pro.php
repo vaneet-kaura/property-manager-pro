@@ -187,7 +187,7 @@ class PropertyManagerPro {
         }
         
         // Daily alerts - 8 AM
-        if (!wp_next_scheduled('property_manager_daily_alerts')) {
+        /*if (!wp_next_scheduled('property_manager_daily_alerts')) {
             $scheduled = wp_schedule_event(strtotime('tomorrow 08:00:00'), 'daily', 'property_manager_daily_alerts');
             if ($scheduled === false) {
                 error_log('Property Manager Pro: Failed to schedule daily alerts cron job');
@@ -210,7 +210,7 @@ class PropertyManagerPro {
             if ($scheduled === false) {
                 error_log('Property Manager Pro: Failed to schedule monthly alerts cron job');
             }
-        }
+        }*/
         
         // Daily cleanup - 2 AM
         if (!wp_next_scheduled('property_manager_daily_cleanup')) {
@@ -356,16 +356,11 @@ class PropertyManagerPro {
                 'content' => '[property_advanced_search_form] [property_search_results]',
                 'slug' => 'advanced-property-search'
             ),
-            'user_dashboard' => array(
+            /*'user_dashboard' => array(
                 'title' => __('User Dashboard', 'property-manager-pro'),
                 'content' => '[property_user_dashboard]',
                 'slug' => 'user-dashboard'
-            ),
-            'user_favorites' => array(
-                'title' => __('My Favorites', 'property-manager-pro'),
-                'content' => '[property_user_favorites]',
-                'slug' => 'my-favorites'
-            ),
+            ),            
             'saved_searches' => array(
                 'title' => __('Saved Searches', 'property-manager-pro'),
                 'content' => '[property_saved_searches]',
@@ -375,6 +370,11 @@ class PropertyManagerPro {
                 'title' => __('Property Alerts', 'property-manager-pro'),
                 'content' => '[property_alerts_management]',
                 'slug' => 'property-alerts'
+            ),*/
+            'user_favorites' => array(
+                'title' => __('My Favorites', 'property-manager-pro'),
+                'content' => '[property_user_favorites]',
+                'slug' => 'my-favorites'
             ),
             'last_viewed' => array(
                 'title' => __('Last Viewed Properties', 'property-manager-pro'),

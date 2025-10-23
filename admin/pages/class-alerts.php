@@ -159,8 +159,11 @@ class PropertyManager_Admin_Alerts {
                 <table class="wp-list-table widefat fixed striped">
                     <thead>
                         <tr>
-                            <td class="check-column">
-                                <input type="checkbox" id="select-all-alerts">
+                            <td class="manage-column column-cb check-column">
+                                <label class="screen-reader-text" for="cb-select-all-1">
+                                    <?php esc_html_e('Select All', 'property-manager-pro'); ?>
+                                </label>
+                                <input id="cb-select-all-1" type="checkbox">
                             </td>
                             <th><?php _e('Email', 'property-manager-pro'); ?></th>
                             <th><?php _e('Frequency', 'property-manager-pro'); ?></th>
@@ -242,36 +245,6 @@ class PropertyManager_Admin_Alerts {
                 <p><?php _e('No property alerts have been created yet.', 'property-manager-pro'); ?></p>
             <?php endif; ?>
         </div>
-        
-        <script>
-        jQuery(document).ready(function($) {
-            $('#select-all-alerts').on('click', function() {
-                $('input[name="alerts[]"]').prop('checked', this.checked);
-            });
-        });
-        </script>
-        
-        <style>
-        .status-badge {
-            display: inline-block;
-            padding: 2px 8px;
-            border-radius: 3px;
-            font-size: 12px;
-            font-weight: 600;
-        }
-        .status-active {
-            background: #d4edda;
-            color: #155724;
-        }
-        .status-paused {
-            background: #fff3cd;
-            color: #856404;
-        }
-        .status-unsubscribed {
-            background: #f8d7da;
-            color: #721c24;
-        }
-        </style>
         <?php
     }
 }

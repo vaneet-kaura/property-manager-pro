@@ -258,7 +258,7 @@ class PropertyManager_Admin_Dashboard {
                         </p>
                     </div>
                     
-                    <!-- User Activity Widget -->
+                    <!-- User Activity Widget
                     <div class="dashboard-widget">
                         <h3><?php esc_html_e('User Activity', 'property-manager-pro'); ?></h3>
                         <div class="stats-grid">
@@ -293,13 +293,11 @@ class PropertyManager_Admin_Dashboard {
                                 <?php esc_html_e('View Alerts', 'property-manager-pro'); ?>
                             </a>
                         </p>
-                    </div>
+                    </div>-->
                     
                 </div>
             </div>
-        </div>
-        
-        <?php $this->render_javascript(); ?>
+        </div>        
         <?php
     }
     
@@ -489,105 +487,6 @@ class PropertyManager_Admin_Dashboard {
                 <p><?php esc_html_e('Unable to load dashboard statistics. Please check the error log.', 'property-manager-pro'); ?></p>
             </div>
         </div>
-        <?php
-    }
-    
-    /**
-     * Render JavaScript for AJAX functionality
-     */
-    private function render_javascript() {
-        ?>
-        <script>
-        jQuery(document).ready(function($) {
-            // Process pending images
-            $('#process-images-btn').on('click', function() {
-                var btn = $(this);
-                var nonce = btn.data('nonce');
-                
-                btn.prop('disabled', true).text('<?php echo esc_js(__('Processing...', 'property-manager-pro')); ?>');
-                $('#image-action-result').html('');
-                
-                $.ajax({
-                    url: ajaxurl,
-                    type: 'POST',
-                    data: {
-                        action: 'property_manager_process_images',
-                        nonce: nonce,
-                        batch_size: 10
-                    },
-                    success: function(response) {
-                        if (response.success) {
-                            $('#image-action-result').html('<div class="notice notice-success inline"><p>' + response.data.message + '</p></div>');
-                            // Reload page after 2 seconds to update stats
-                            setTimeout(function() {
-                                location.reload();
-                            }, 2000);
-                        } else {
-                            $('#image-action-result').html('<div class="notice notice-error inline"><p>' + response.data.message + '</p></div>');
-                            btn.prop('disabled', false).html('<span class="dashicons dashicons-update"></span> <?php echo esc_js(__('Process Pending Images', 'property-manager-pro')); ?>');
-                        }
-                    },
-                    error: function() {
-                        $('#image-action-result').html('<div class="notice notice-error inline"><p><?php echo esc_js(__('An error occurred.', 'property-manager-pro')); ?></p></div>');
-                        btn.prop('disabled', false).html('<span class="dashicons dashicons-update"></span> <?php echo esc_js(__('Process Pending Images', 'property-manager-pro')); ?>');
-                    }
-                });
-            });
-            
-            // Retry failed images
-            $('#retry-failed-images-btn').on('click', function() {
-                var btn = $(this);
-                var nonce = btn.data('nonce');
-                
-                btn.prop('disabled', true).text('<?php echo esc_js(__('Retrying...', 'property-manager-pro')); ?>');
-                $('#image-action-result').html('');
-                
-                $.ajax({
-                    url: ajaxurl,
-                    type: 'POST',
-                    data: {
-                        action: 'property_manager_retry_failed_images',
-                        nonce: nonce,
-                        batch_size: 20
-                    },
-                    success: function(response) {
-                        if (response.success) {
-                            $('#image-action-result').html('<div class="notice notice-success inline"><p>' + response.data.message + '</p></div>');
-                            setTimeout(function() {
-                                location.reload();
-                            }, 2000);
-                        } else {
-                            $('#image-action-result').html('<div class="notice notice-error inline"><p>' + response.data.message + '</p></div>');
-                            btn.prop('disabled', false).html('<span class="dashicons dashicons-image-rotate"></span> <?php echo esc_js(__('Retry Failed Images', 'property-manager-pro')); ?>');
-                        }
-                    },
-                    error: function() {
-                        $('#image-action-result').html('<div class="notice notice-error inline"><p><?php echo esc_js(__('An error occurred.', 'property-manager-pro')); ?></p></div>');
-                        btn.prop('disabled', false).html('<span class="dashicons dashicons-image-rotate"></span> <?php echo esc_js(__('Retry Failed Images', 'property-manager-pro')); ?>');
-                    }
-                });
-            });
-            
-            // Refresh stats
-            $('#refresh-stats-btn').on('click', function() {
-                var btn = $(this);
-                btn.prop('disabled', true).find('.dashicons').addClass('dashicons-update-spinning');
-                
-                // Clear cache and reload
-                $.ajax({
-                    url: ajaxurl,
-                    type: 'POST',
-                    data: {
-                        action: 'property_manager_clear_dashboard_cache',
-                        nonce: btn.data('nonce')
-                    },
-                    complete: function() {
-                        location.reload();
-                    }
-                });
-            });
-        });
-        </script>
         <?php
     }
 }
