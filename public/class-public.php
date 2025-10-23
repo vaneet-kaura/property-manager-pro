@@ -1,7 +1,6 @@
 <?php
 /**
  * Public-facing functionality of the plugin
- * FIXED: Secure session handling and comprehensive nonce verification
  * 
  * @package PropertyManagerPro
  * @version 1.0.2
@@ -45,6 +44,9 @@ class PropertyManager_Public {
         
         // Handle form submissions
         add_action('wp', array($this, 'handle_form_submissions'));
+
+        add_action('wp_ajax_submit_property_inquiry', array($this, 'handle_property_inquiry'));
+        add_action('wp_ajax_nopriv_submit_property_inquiry', array($this, 'handle_property_inquiry'));
         
         // Add body classes
         add_filter('body_class', array($this, 'add_body_classes'));
@@ -55,20 +57,16 @@ class PropertyManager_Public {
     
     /**
      * Initialize public functionality
-     * FIXED: Secure session handling with proper checks
      */
     public function init() {
         // Load text domain if not already loaded
         if (!is_textdomain_loaded('property-manager-pro')) {
             load_plugin_textdomain('property-manager-pro', false, dirname(plugin_basename(PROPERTY_MANAGER_PLUGIN_PATH . 'property-manager-pro.php')) . '/languages');
         }
-        
-        // FIXED: Start session securely for guest tracking
         $this->start_secure_session();
     }
     
     /**
-     * FIXED: Start session with security checks
      * Prevents "headers already sent" errors and adds security
      */
     private function start_secure_session() {
@@ -120,9 +118,6 @@ class PropertyManager_Public {
         }
     }
     
-    /**
-     * FIXED: Regenerate session ID periodically to prevent session fixation
-     */
     private function regenerate_session_periodically() {
         if (!isset($_SESSION['pm_session_created'])) {
             $_SESSION['pm_session_created'] = time();
@@ -308,7 +303,6 @@ class PropertyManager_Public {
     
     /**
      * Handle form submissions
-     * FIXED: Added comprehensive nonce verification for all forms
      */
     public function handle_form_submissions() {
         // Check if this is a form submission
@@ -339,23 +333,26 @@ class PropertyManager_Public {
     
     /**
      * Handle property inquiry submission
-     * FIXED: Added nonce verification and comprehensive validation
      */
-    private function handle_property_inquiry() {
-        // FIXED: Verify nonce first
+    public function handle_property_inquiry() {        
         if (!isset($_POST['inquiry_nonce']) || !wp_verify_nonce($_POST['inquiry_nonce'], 'property_inquiry')) {
-            $this->log_security_event('inquiry_nonce_failed', array(
-                'ip' => $this->get_client_ip(),
-                'property_id' => isset($_POST['property_id']) ? intval($_POST['property_id']) : 0
-            ));
-            
-            $this->add_notice('error', __('Security verification failed. Please refresh the page and try again.', 'property-manager-pro'));
+            $message = __('Security verification failed. Please refresh the page and try again.', 'property-manager-pro');            
+            if (wp_doing_ajax()) {
+                wp_send_json_error(array('message' => $message));
+                return;
+            }
+            $this->add_notice('error', $message);
             return;
         }
         
         // Check rate limiting
-        if (!$this->check_rate_limit('property_inquiry', 5, 3600)) {
-            $this->add_notice('error', __('Too many inquiry requests. Please try again later.', 'property-manager-pro'));
+        if (!$this->check_rate_limit('property_inquiry', 30, 3600)) {
+            $message = __('Too many inquiry requests. Please try again later.', 'property-manager-pro');
+            if (wp_doing_ajax()) {
+                wp_send_json_error(array('message' => $message));
+                return;
+            }
+            $this->add_notice('error', $message);
             return;
         }
         
@@ -393,52 +390,63 @@ class PropertyManager_Public {
             $errors[] = __('Invalid property ID.', 'property-manager-pro');
         }
         
-        // Check honeypot
-        if (!empty($_POST['website'])) {
-            // Bot detected, fail silently
-            $this->log_security_event('honeypot_triggered', array(
-                'ip' => $this->get_client_ip(),
-                'form' => 'property_inquiry'
-            ));
-            $this->add_notice('success', __('Thank you for your inquiry. We will contact you soon.', 'property-manager-pro'));
-            return;
-        }
-        
         if (!empty($errors)) {
+            if (wp_doing_ajax()) {
+                wp_send_json_error(array('message' => implode("\n", $errors)));
+                return;
+            }
+
             foreach ($errors as $error) {
                 $this->add_notice('error', $error);
             }
             return;
         }
+
+        // Insert inquiry
+        global $wpdb;
+        $table = PropertyManager_Database::get_table_name('property_inquiries');
+        
+        $result = $wpdb->insert($table, array(
+            'property_id' => $property_id,
+            'user_id' => is_user_logged_in() ? get_current_user_id() : null,
+            'name' => $name,
+            'email' => $email,
+            'phone' => $phone,
+            'message' => $message,
+            'ip_address' => $this->get_client_ip(),
+            'user_agent' => $this->get_user_agent(),
+            'created_at' => current_time('mysql'),
+            'updated_at' => current_time('mysql'),
+            'status' => 'new'
+        ));
         
         // Send inquiry email
         $email_manager = PropertyManager_Email::get_instance();
         $result = $email_manager->send_property_inquiry($property_id, $name, $email, $phone, $message);
         
         if ($result) {
-            $this->add_notice('success', __('Your inquiry has been sent successfully. We will contact you soon.', 'property-manager-pro'));
-            
-            // Log successful inquiry
-            $this->log_user_action('property_inquiry_sent', array(
-                'property_id' => $property_id,
-                'email' => $email
-            ));
-        } else {
-            $this->add_notice('error', __('Failed to send inquiry. Please try again or contact us directly.', 'property-manager-pro'));
+            $message = __('Your inquiry has been sent successfully. We will contact you soon.', 'property-manager-pro');
+            if (wp_doing_ajax()) {
+                wp_send_json_success(array('message' => $message));
+                return;
+            }
+            $this->add_notice('success', $message);
+            return;
+        } 
+
+        $message = __('Failed to send inquiry. Please try again or contact us directly.', 'property-manager-pro');
+        if (wp_doing_ajax()) {
+            wp_send_json_error(array('message' => $message));
+            return;
         }
+        $this->add_notice('error', $message);
     }
     
     /**
      * Handle alert signup
-     * FIXED: Added nonce verification
      */
     private function handle_alert_signup() {
-        // FIXED: Verify nonce
         if (!isset($_POST['alert_nonce']) || !wp_verify_nonce($_POST['alert_nonce'], 'property_alert_signup')) {
-            $this->log_security_event('alert_nonce_failed', array(
-                'ip' => $this->get_client_ip()
-            ));
-            
             $this->add_notice('error', __('Security verification failed. Please refresh and try again.', 'property-manager-pro'));
             return;
         }
@@ -449,15 +457,9 @@ class PropertyManager_Public {
     
     /**
      * Handle save search
-     * FIXED: Added nonce verification and validation
      */
     private function handle_save_search() {
-        // FIXED: Verify nonce
         if (!isset($_POST['save_search_nonce']) || !wp_verify_nonce($_POST['save_search_nonce'], 'save_property_search')) {
-            $this->log_security_event('save_search_nonce_failed', array(
-                'ip' => $this->get_client_ip()
-            ));
-            
             $this->add_notice('error', __('Security verification failed. Please try again.', 'property-manager-pro'));
             return;
         }
@@ -474,21 +476,15 @@ class PropertyManager_Public {
     
     /**
      * Handle contact form
-     * FIXED: Added nonce verification
      */
     private function handle_contact_form() {
-        // FIXED: Verify nonce
         if (!isset($_POST['contact_nonce']) || !wp_verify_nonce($_POST['contact_nonce'], 'contact_form')) {
-            $this->log_security_event('contact_nonce_failed', array(
-                'ip' => $this->get_client_ip()
-            ));
-            
             $this->add_notice('error', __('Security verification failed. Please try again.', 'property-manager-pro'));
             return;
         }
         
         // Check rate limiting
-        if (!$this->check_rate_limit('contact_form', 3, 3600)) {
+        if (!$this->check_rate_limit('contact_form', 10, 3600)) {
             $this->add_notice('error', __('Too many contact requests. Please try again later.', 'property-manager-pro'));
             return;
         }
@@ -497,10 +493,7 @@ class PropertyManager_Public {
         $this->add_notice('success', __('Your message has been sent successfully.', 'property-manager-pro'));
     }
     
-    /**
-     * FIXED: Check rate limiting for form submissions
-     */
-    private function check_rate_limit($action, $max_attempts = 5, $time_window = 3600) {
+    private function check_rate_limit($action, $max_attempts = 10, $time_window = 3600) {
         $ip = $this->get_client_ip();
         $transient_key = 'pm_rate_limit_' . md5($action . '_' . $ip);
         
@@ -640,9 +633,6 @@ class PropertyManager_Public {
         }
     }
     
-    /**
-     * FIXED: Get client IP address securely
-     */
     private function get_client_ip() {
         $ip = '';
         
@@ -660,29 +650,8 @@ class PropertyManager_Public {
         return $ip ? $ip : 'unknown';
     }
     
-    /**
-     * FIXED: Log security events
-     */
-    private function log_security_event($event_type, $data = array()) {
-        if (defined('WP_DEBUG') && WP_DEBUG) {
-            error_log(sprintf(
-                'Property Manager Security Event [%s]: %s',
-                $event_type,
-                wp_json_encode($data)
-            ));
-        }
-    }
-    
-    /**
-     * FIXED: Log user actions
-     */
-    private function log_user_action($action, $data = array()) {
-        if (defined('WP_DEBUG') && WP_DEBUG) {
-            error_log(sprintf(
-                'Property Manager User Action [%s]: %s',
-                $action,
-                wp_json_encode($data)
-            ));
-        }
+    private function get_user_agent() {
+        return isset($_SERVER['HTTP_USER_AGENT']) ? 
+            substr(sanitize_text_field($_SERVER['HTTP_USER_AGENT']), 0, 255) : '';
     }
 }

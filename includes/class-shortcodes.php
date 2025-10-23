@@ -117,6 +117,10 @@ class PropertyManager_Shortcodes {
             'class' => ''
         ), $atts, 'property_search_results');
         
+        $options = get_option('property_manager_options', array());
+        $default_view = isset($options['default_view']) ? $options['default_view'] : "grid";
+        $enable_map = isset($options['enable_map']) ? $options['enable_map'] : true;
+
         // Sanitize attributes
         $view = sanitize_text_field($atts['view']);
         $per_page = absint($atts['per_page']);
@@ -138,6 +142,9 @@ class PropertyManager_Shortcodes {
         if (isset($_GET['view']) && in_array($_GET['view'], array('grid', 'list', 'map'))) {
             $view = sanitize_text_field($_GET['view']);
         }
+
+        if(!$enable_map)
+            $view = $default_view;
 
         if ($view === 'map')
             $per_page = 100;
@@ -186,10 +193,12 @@ class PropertyManager_Shortcodes {
                                    class="btn btn-outline-secondary <?php echo $view === 'list' ? 'active' : ''; ?>">
                                     <i class="fas fa-list"></i>
                                 </a>
-                                <a href="<?php echo esc_url(add_query_arg('view', 'map')); ?>" 
-                                   class="btn btn-outline-secondary <?php echo $view === 'map' ? 'active' : ''; ?>">
-                                    <i class="fas fa-map"></i>
-                                </a>
+                                <?php if($enable_map):?>
+                                    <a href="<?php echo esc_url(add_query_arg('view', 'map')); ?>" 
+                                       class="btn btn-outline-secondary <?php echo $view === 'map' ? 'active' : ''; ?>">
+                                        <i class="fas fa-map"></i>
+                                    </a>
+                                <?php endif;?>
                             </div>
                         <?php endif; ?>
                         
@@ -459,7 +468,10 @@ class PropertyManager_Shortcodes {
      * Render User Favorites
      */
     public function render_user_favorites($atts) {
-        if (!is_user_logged_in()) {
+        $options = get_option('property_manager_options', array());
+        $enable_user_registration = isset($options['enable_user_registration']) ? boolval($options['enable_user_registration']) : false;
+        
+        if (!is_user_logged_in() && $enable_user_registration) {
             return $this->render_login_required_message();
         }
         
@@ -476,12 +488,9 @@ class PropertyManager_Shortcodes {
         $favorites = $favorites_manager->get_user_favorites(null, array(
             'page' => $page,
             'per_page' => absint($atts['per_page'])
-        ));
-        
+        ));        
         ?>
         <div class="property-user-favorites <?php echo esc_attr($atts['class']); ?>">
-            <h2 class="mb-4"><?php esc_html_e('My Favorites', 'property-manager-pro'); ?></h2>
-            
             <?php if (empty($favorites['properties'])): ?>
                 <div class="alert alert-info text-center py-5">
                     <i class="fas fa-heart fa-4x text-muted mb-3"></i>
@@ -745,34 +754,34 @@ class PropertyManager_Shortcodes {
         
         ob_start();
         ?>
-        <div class="property-contact-form <?php echo esc_attr($atts['class']); ?>">
+        <div id="property-contact-form" class="<?php echo esc_attr($atts['class']); ?>">
             <h3 class="h4 mb-3"><?php esc_html_e('Contact About This Property', 'property-manager-pro'); ?></h3>
             
             <form id="property-inquiry-form" method="post">
                 <div class="mb-3">
                     <label for="inquiry_name" class="form-label"><?php esc_html_e('Name', 'property-manager-pro'); ?></label>
                     <input type="text" name="name" id="inquiry_name" class="form-control" required 
-                           value="<?php echo is_user_logged_in() ? esc_attr(wp_get_current_user()->display_name) : ''; ?>">
+                           value="<?php echo is_user_logged_in() ? esc_attr(wp_get_current_user()->display_name) : (isset($_POST['name']) ? $_POST['name'] : ''); ?>">
                 </div>
                 
                 <div class="mb-3">
                     <label for="inquiry_email" class="form-label"><?php esc_html_e('Email', 'property-manager-pro'); ?></label>
                     <input type="email" name="email" id="inquiry_email" class="form-control" required
-                           value="<?php echo is_user_logged_in() ? esc_attr(wp_get_current_user()->user_email) : ''; ?>">
+                           value="<?php echo is_user_logged_in() ? esc_attr(wp_get_current_user()->user_email) : (isset($_POST['email']) ? $_POST['email'] : ''); ?>">
                 </div>
                 
                 <div class="mb-3">
                     <label for="inquiry_phone" class="form-label"><?php esc_html_e('Phone', 'property-manager-pro'); ?></label>
-                    <input type="tel" name="phone" id="inquiry_phone" class="form-control">
+                    <input type="tel" name="phone" id="inquiry_phone" class="form-control" value="<?php echo isset($_POST['phone']) ? $_POST['phone'] : ''?>">
                 </div>
                 
                 <div class="mb-3">
                     <label for="inquiry_message" class="form-label"><?php esc_html_e('Message', 'property-manager-pro'); ?></label>
-                    <textarea name="message" id="inquiry_message" class="form-control" rows="5" required></textarea>
+                    <textarea name="message" id="inquiry_message" class="form-control" rows="5" required><?php echo isset($_POST['message']) ? $_POST['message'] : ''?></textarea>
                 </div>
                 
                 <?php wp_nonce_field('property_inquiry', 'inquiry_nonce'); ?>
-                <input type="hidden" name="property_id" value="<?php echo esc_attr($property_id); ?>">
+                <input type="hidden" name="property_id" id="property_id" value="<?php echo esc_attr($property_id); ?>">
                 <input type="hidden" name="property_inquiry_submit" value="1">
                 
                 <button type="submit" class="btn btn-warning">
@@ -867,11 +876,6 @@ class PropertyManager_Shortcodes {
      */
     private function render_property_card($property, $style = 'default', $show_remove = false) {		
         $safe_property = $this->get_safe_property($property);        
-        $is_favorite = false;
-        if (is_user_logged_in()) {
-            $favorites_manager = PropertyManager_Favorites::get_instance();
-            $is_favorite = $favorites_manager->is_favorite($safe_property->id);
-        }        
         ?>
         <div class="card property-card h-100 rounded-3 overflow-hidden">
             <?php if ($safe_property->featured_image): ?>
@@ -895,7 +899,7 @@ class PropertyManager_Shortcodes {
                     
                     <div class="position-absolute top-0 end-0 p-2">
                         <button type="button" 
-                                class="btn btn-sm btn-light favorite-btn <?php echo $is_favorite ? 'active' : ''; ?>" 
+                                class="btn btn-sm btn-light favorite-btn <?php echo $safe_property->is_favorite ? 'favorited' : ''; ?>" 
                                 data-property-id="<?php echo esc_attr($safe_property->id); ?>"
                                 data-nonce="<?php echo esc_attr(wp_create_nonce('property_manager_nonce')); ?>">
                             <i class="fas fa-heart"></i>
@@ -926,12 +930,7 @@ class PropertyManager_Shortcodes {
      * Helper: Render property list item
      */
     private function render_property_list_item($property) {
-        $safe_property = $this->get_safe_property($property);
-        $is_favorite = false;
-        if (is_user_logged_in()) {
-            $favorites_manager = PropertyManager_Favorites::get_instance();
-            $is_favorite = $favorites_manager->is_favorite($safe_property->id);
-        } 
+        $safe_property = $this->get_safe_property($property);        
         ?>
         <div class="card rounded-3 property-card overflow-hidden mb-3">
             <div class="row g-0">
@@ -953,7 +952,7 @@ class PropertyManager_Shortcodes {
                     
                         <div class="position-absolute top-0 end-0 p-2">
                             <button type="button" 
-                                    class="btn btn-sm btn-light favorite-btn <?php echo $is_favorite ? 'active' : ''; ?>" 
+                                    class="btn btn-sm btn-light favorite-btn <?php echo $safe_property->is_favorite ? 'favorited' : ''; ?>" 
                                     data-property-id="<?php echo esc_attr($safe_property->id); ?>"
                                     data-nonce="<?php echo esc_attr(wp_create_nonce('property_manager_nonce')); ?>">
                                 <i class="fas fa-heart"></i>
@@ -1012,11 +1011,14 @@ class PropertyManager_Shortcodes {
                     $featured_image = $property->images[0]->image_url;
                 }
             }
+
+            $options = get_option('property_manager_options', array());
+            $currency_symbol = isset($options['currency_symbol']) ? $options['currency_symbol'] : "";
         
             $map_data[] = array(
                 'id' => absint($property->id),
                 'title' => esc_html($property->title),
-                'price' => esc_html(($property->currency == "EUR" ? "&euro;" : "") . number_format($property->price)),
+                'price' => esc_html(($property->currency == "EUR" ? "&euro;" : $currency_symbol) . number_format($property->price)),
                 'beds' => absint($property->beds ?? 0),
                 'baths' => absint($property->baths ?? 0),
                 'town' => esc_html($property->town ?? ''),
@@ -1078,12 +1080,15 @@ class PropertyManager_Shortcodes {
     }
 
     private function get_safe_property($property) {
+        $options = get_option('property_manager_options', array());
+        $currency_symbol = isset($options['currency_symbol']) ? $options['currency_symbol'] : "";
+
         return (object) array(
             'id' => absint($property->id ?? 0),
             'title' => esc_html($property->title ?? ''),
             'ref' => esc_html($property->ref ?? ''),
             'price' => floatval($property->price ?? 0),
-            'currency' => esc_html($property->currency == "EUR" ? "&euro;" : ""),
+            'currency' => esc_html($property->currency == "EUR" ? "&euro;" : $currency_symbol),
             'beds' => absint($property->beds ?? 0),
             'baths' => absint($property->baths ?? 0),
             'town' => esc_html($property->town ?? ''),
@@ -1093,7 +1098,8 @@ class PropertyManager_Shortcodes {
             'new_build' => absint($property->new_build ?? 0),
             'property_type' => esc_html($property->property_type ?? ''),
             'featured_image' => is_array($property->images) && count($property->images) > 0 ? ($property->images[0]->attachment_id != null ? wp_get_attachment_image_url($property->images[0]->attachment_id, 'medium') : esc_url($property->images[0]->image_url ?? '')) : "",
-            'url' => esc_url(home_url('/property/' . absint($property->id ?? 0)))
+            'url' => esc_url(home_url('/property/' . absint($property->id ?? 0))),
+            'is_favorite' => PropertyManager_Favorites::get_instance()->is_favorite(absint($property->id ?? 0))
         );
     }
 }

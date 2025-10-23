@@ -68,6 +68,14 @@ class PropertyManager_Email {
     /**
      * Send property alert email
      */
+    public function send_property_inquiry($property_id, $name, $email, $phone, $message) {
+        return true;
+    }
+    
+    
+    /**
+     * Send property alert email
+     */
     public function send_property_alert($email, $properties, $frequency, $unsubscribe_token) {
         if (empty($properties)) {
             return false;

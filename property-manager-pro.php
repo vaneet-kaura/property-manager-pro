@@ -17,7 +17,7 @@ if (!defined('ABSPATH')) {
 }
 
 // Define plugin constants
-define('PROPERTY_MANAGER_VERSION', '0.0.0');
+define('PROPERTY_MANAGER_VERSION', '1.1.1');
 define('PROPERTY_MANAGER_PLUGIN_URL', plugin_dir_url(__FILE__));
 define('PROPERTY_MANAGER_PLUGIN_PATH', plugin_dir_path(__FILE__));
 define('PROPERTY_MANAGER_PLUGIN_BASENAME', plugin_basename(__FILE__));
@@ -61,7 +61,6 @@ class PropertyManagerPro {
         require_once PROPERTY_MANAGER_PLUGIN_PATH . 'includes/class-alerts.php';
         require_once PROPERTY_MANAGER_PLUGIN_PATH . 'includes/class-email.php';
         require_once PROPERTY_MANAGER_PLUGIN_PATH . 'includes/class-shortcodes.php';
-        require_once PROPERTY_MANAGER_PLUGIN_PATH . 'includes/class-ajax.php';
         
         if (is_admin()) {
             require_once PROPERTY_MANAGER_PLUGIN_PATH . 'admin/class-admin.php';
@@ -92,13 +91,12 @@ class PropertyManagerPro {
         PropertyManager_Alerts::get_instance();
         PropertyManager_Email::get_instance();
         PropertyManager_Shortcodes::get_instance();
-        PropertyManager_Ajax::get_instance();
         
         if (is_admin()) {
             PropertyManager_Admin::get_instance();
-        } else {
-            PropertyManager_Public::get_instance();
         }
+        
+        PropertyManager_Public::get_instance();        
     }
 
     public function enqueue_scripts() {
@@ -408,8 +406,7 @@ class PropertyManagerPro {
                     error_log('Property Manager Pro: Failed to create page: ' . $page_data['title']);
                 }
             }
-        }
-        
+        }        
         update_option('property_manager_pages', $created_pages);
     }
 
@@ -417,46 +414,26 @@ class PropertyManagerPro {
      * Set default options
      */
     private function set_default_options() {
-        $existing_options = get_option('property_manager_options');
-        
+        $default_options = array(
+            'feed_url' => 'https://frontlinepropertiesspain.com/xml/kyero.php?f=6878c2aa69875',
+            'import_frequency' => 'hourly',
+            'immediate_image_download' => false,
+            'results_per_page' => 20,
+            'default_view' => 'grid',
+            'email_verification_required' => true,
+            'admin_email' => get_option('admin_email'),
+            'enable_map' => true,
+            'map_provider' => 'openstreetmap',
+            'enable_user_registration' => false,
+            'currency_symbol' => '&euro;',
+            'default_language' => 'en',            
+        );
+
+        $existing_options = get_option('property_manager_options');        
         if ($existing_options === false) {
-            $default_options = array(
-                'feed_url' => 'https://frontlinepropertiesspain.com/xml/kyero.php?f=6878c2aa69875',
-                'import_frequency' => 'hourly',
-                'results_per_page' => 20,
-                'default_view' => 'grid',
-                'enable_map' => true,
-                'map_provider' => 'openstreetmap',
-                'email_verification_required' => true,
-                'admin_email' => get_option('admin_email'),
-                'currency_symbol' => '€',
-                'default_language' => 'en',
-                'immediate_image_download' => false,
-                'max_image_size' => 10, // MB
-                'image_quality' => 85, // 1-100
-                'enable_image_optimization' => true
-            );
-            
             add_option('property_manager_options', $default_options);
         } else {
             // Merge with defaults to add any new options
-            $default_options = array(
-                'feed_url' => 'https://frontlinepropertiesspain.com/xml/kyero.php?f=6878c2aa69875',
-                'import_frequency' => 'hourly',
-                'results_per_page' => 20,
-                'default_view' => 'grid',
-                'enable_map' => true,
-                'map_provider' => 'openstreetmap',
-                'email_verification_required' => true,
-                'admin_email' => get_option('admin_email'),
-                'currency_symbol' => '€',
-                'default_language' => 'en',
-                'immediate_image_download' => false,
-                'max_image_size' => 10,
-                'image_quality' => 85,
-                'enable_image_optimization' => true
-            );
-            
             $updated_options = wp_parse_args($existing_options, $default_options);
             update_option('property_manager_options', $updated_options);
         }

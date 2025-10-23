@@ -41,8 +41,7 @@ class PropertyManager_Admin_Settings {
         }
         
         // Get current options
-        $options = get_option('property_manager_options', array());
-        
+        $options = get_option('property_manager_options', array());        
         ?>
         <div class="wrap">
             <h1><?php esc_html_e('Property Manager Settings', 'property-manager-pro'); ?></h1>

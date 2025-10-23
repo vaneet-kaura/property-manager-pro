@@ -177,7 +177,8 @@ class PropertyManager_Database {
         $favorites_table = $wpdb->prefix . 'pm_user_favorites';
         $favorites_sql = "CREATE TABLE IF NOT EXISTS $favorites_table (
             id bigint(20) unsigned NOT NULL AUTO_INCREMENT,
-            user_id bigint(20) unsigned NOT NULL,
+            user_id bigint(20) unsigned NULL,
+            tmp_user_id varchar(255) DEFAULT NULL,
             property_id bigint(20) unsigned NOT NULL,
             created_at datetime NOT NULL DEFAULT CURRENT_TIMESTAMP,
             PRIMARY KEY (id),

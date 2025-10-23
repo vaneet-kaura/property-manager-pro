@@ -412,8 +412,8 @@ html {
     border-width: 0.15em;
 }
 
-.favorite-btn.favorited .dashicons-heart,
-.favorited .dashicons-heart {
+.favorite-btn.favorited .fa-heart,
+.favorited .fa-heart {
     color: #dc3545 !important;
 }
 

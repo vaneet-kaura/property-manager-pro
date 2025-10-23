@@ -1,15 +1,270 @@
-jQuery(document).ready(function ($) {
-    // Advanced search toggle icon rotation
-    $('[data-bs-toggle="collapse"]').on('click', function () {
-        var icon = $(this).find('i');
-        if ($($(this).data('bs-target')).hasClass('show')) {
-            icon.removeClass('fa-chevron-up').addClass('fa-chevron-down');
-        } else {
-            icon.removeClass('fa-chevron-down').addClass('fa-chevron-up');
+/**
+ * Property Manager Pro - Map Functionality
+ */
+
+(function ($) {
+    'use strict';
+
+    // Property Map Handler
+    const PropertyMap = {
+        map: null,
+        markers: [],
+        markerClusterGroup: null,
+
+        init: function () {
+            const $mapContainer = $('#properties-map');
+
+            if ($mapContainer.length === 0 || typeof L === 'undefined') {
+                return;
+            }
+
+            this.initializeMap($mapContainer);
+        },
+
+        initializeMap: function ($container) {
+            const propertiesData = $container.data('properties');
+
+            if (!propertiesData || propertiesData.length === 0) {
+                this.showNoPropertiesMessage($container);
+                return;
+            }
+
+            // Create map centered on first property or default location
+            const centerLat = propertiesData[0].latitude || 37.8;
+            const centerLng = propertiesData[0].longitude || -0.8;
+
+            this.map = L.map('properties-map').setView([centerLat, centerLng], 10);
+
+            // Add OpenStreetMap tile layer (free)
+            L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+                attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors',
+                maxZoom: 19
+            }).addTo(this.map);
+
+            // Add property markers
+            this.addPropertyMarkers(propertiesData);
+
+            // Fit map bounds to show all markers
+            if (this.markers.length > 0) {
+                const group = new L.featureGroup(this.markers);
+                this.map.fitBounds(group.getBounds().pad(0.1));
+            }
+
+            // Fix map display issue when container is initially hidden
+            setTimeout(() => {
+                this.map.invalidateSize();
+            }, 100);
+        },
+
+        addPropertyMarkers: function (properties) {
+            const self = this;
+
+            properties.forEach(function (property) {
+                if (!property.latitude || !property.longitude) {
+                    return;
+                }
+
+                // Create custom icon for property markers
+                const propertyIcon = L.divIcon({
+                    className: 'custom-property-marker',
+                    html: '<div class="marker-pin"><i class="fas fa-home"></i></div>',
+                    iconSize: [40, 40],
+                    iconAnchor: [20, 40],
+                    popupAnchor: [0, -40]
+                });
+
+                // Create marker
+                const marker = L.marker([property.latitude, property.longitude], {
+                    icon: propertyIcon,
+                    title: property.title
+                });
+
+                // Create popup content
+                const popupContent = self.createPopupContent(property);
+                marker.bindPopup(popupContent, {
+                    maxWidth: 300,
+                    className: 'property-popup'
+                });
+
+                // Add marker to map and store reference
+                marker.addTo(self.map);
+                self.markers.push(marker);
+
+                // Handle marker click to highlight property card if in list/grid view
+                marker.on('click', function () {
+                    self.highlightProperty(property.id);
+                });
+            });
+        },
+
+        createPopupContent: function (property) {
+            let html = '<div class="property-map-popup">';
+
+            // Property image
+            if (property.image) {
+                html += '<div class="popup-image">';
+                html += '<img src="' + this.escapeHtml(property.image) + '" alt="' + this.escapeHtml(property.title) + '">';
+                html += '</div>';
+            }
+
+            // Property details
+            html += '<div class="popup-content">';
+            html += '<h6 class="popup-title">' + this.escapeHtml(property.title) + '</h6>';
+
+            // Property features
+            if (property.beds || property.baths) {
+                html += '<div class="popup-features">';
+                if (property.beds) {
+                    html += '<span><i class="fas fa-bed"></i> ' + property.beds + '</span>';
+                }
+                if (property.baths) {
+                    html += '<span><i class="fas fa-bath"></i> ' + property.baths + '</span>';
+                }
+                html += '</div>';
+            }
+
+            // Location
+            if (property.town) {
+                html += '<div class="popup-location">';
+                html += '<i class="fas fa-map-marker-alt"></i> ' + this.escapeHtml(property.town);
+                if (property.province) {
+                    html += ', ' + this.escapeHtml(property.province);
+                }
+                html += '</div>';
+            }
+
+            // Price
+            html += '<div class="popup-price">' + this.escapeHtml(property.price) + '</div>';
+
+            // View button
+            html += '<a href="' + this.escapeHtml(property.url) + '" class="btn btn-warning text-white btn-sm mt-3">';
+            html += 'View Details <i class="fas fa-arrow-right"></i>';
+            html += '</a>';
+
+            html += '</div>';
+            html += '</div>';
+
+            return html;
+        },
+
+        highlightProperty: function (propertyId) {
+            // Remove previous highlights
+            $('.property-card, .property-list-item').removeClass('highlighted');
+
+            // Add highlight to matching property
+            const $property = $('[data-property-id="' + propertyId + '"]').closest('.property-card, .property-list-item');
+            if ($property.length) {
+                $property.addClass('highlighted');
+
+                // Scroll to property if not in viewport
+                if (!this.isInViewport($property[0])) {
+                    $('html, body').animate({
+                        scrollTop: $property.offset().top - 100
+                    }, 500);
+                }
+
+                // Remove highlight after 3 seconds
+                setTimeout(function () {
+                    $property.removeClass('highlighted');
+                }, 3000);
+            }
+        },
+
+        isInViewport: function (element) {
+            const rect = element.getBoundingClientRect();
+            return (
+                rect.top >= 0 &&
+                rect.left >= 0 &&
+                rect.bottom <= (window.innerHeight || document.documentElement.clientHeight) &&
+                rect.right <= (window.innerWidth || document.documentElement.clientWidth)
+            );
+        },
+
+        showNoPropertiesMessage: function ($container) {
+            $container.html(
+                '<div class="alert alert-info">' +
+                '<i class="fas fa-info-circle"></i> ' +
+                'No properties with valid coordinates to display on map.' +
+                '</div>'
+            );
+        },
+
+        escapeHtml: function (text) {
+            if (!text) return '';
+            const map = {
+                '&': '&amp;',
+                '<': '&lt;',
+                '>': '&gt;',
+                '"': '&quot;',
+                "'": '&#039;'
+            };
+            return String(text).replace(/[&<>"']/g, function (m) {
+                return map[m];
+            });
         }
+    };
+
+    // Initialize map when document is ready
+    $(document).ready(function () {
+        PropertyMap.init();
+
+        // Reinitialize map if view is switched to map
+        $(document).on('click', '.view-switcher a[href*="view=map"]', function () {
+            setTimeout(function () {
+                if ($('#properties-map').length) {
+                    PropertyMap.init();
+                }
+            }, 200);
+        });
     });
 
+    // Make PropertyMap globally accessible if needed
+    window.PropertyMap = PropertyMap;
+})(jQuery);
+
+document.addEventListener('DOMContentLoaded', function () {
+    document.addEventListener('click', function (e) {
+        if (e.target.closest('.favorite-btn')) {
+            e.preventDefault();
+            handleFavoriteToggle(e.target.closest('.favorite-btn'));
+        }
+
+        if (e.target.closest('.remove-favorite-btn')) {
+            e.preventDefault();
+            handleFavoriteRemove(e.target.closest('.remove-favorite-btn'));
+        }
+    });
+});
+
+
+jQuery(document).ready(function ($) {
+
     /***************************************************/
+    $('#property-contact-form').on('submit', function (e) {
+        e.preventDefault();
+
+        $.ajax({
+            url: property_manager_ajax.ajax_url,
+            type: 'POST',
+            data: {
+                action: 'submit_property_inquiry',
+                inquiry_nonce: $('#inquiry_nonce').val(),
+                name: $('#inquiry_name').val(),
+                email: $('#inquiry_email').val(),
+                phone: $('#inquiry_phone').val(),
+                message: $('#inquiry_message').val(),
+                property_id: $('#property_id').val()
+            },
+            success: function (response) {
+                if (response.success) {
+                    showNotification(response.data.message, 'success', true);
+                } else {
+                    showNotification(response.data.message, 'error', false);
+                }
+            }
+        });
+    });
+
 
     $('#user-profile-form').on('submit', function (e) {
         e.preventDefault();
@@ -28,10 +283,9 @@ jQuery(document).ready(function ($) {
             },
             success: function (response) {
                 if (response.success) {
-                    alert(response.data.message);
-                    location.reload();
+                    showNotification(response.data.message, 'success', true);
                 } else {
-                    alert(response.data.message);
+                    showNotification(response.data.message, 'error', false);
                 }
             }
         });
@@ -53,10 +307,9 @@ jQuery(document).ready(function ($) {
             },
             success: function (response) {
                 if (response.success) {
-                    alert(response.data.message);
-                    $('#change-password-form')[0].reset();
+                    showNotification(response.data.message, 'success', true);
                 } else {
-                    alert(response.data.message);
+                    showNotification(response.data.message, 'error', false);
                 }
             }
         });
@@ -75,7 +328,7 @@ jQuery(document).ready(function ($) {
                 nonce: btn.data('nonce')
             },
             success: function (response) {
-                alert(response.data.message);
+                showNotification(response.data.message, 'success', false);
                 btn.prop('disabled', false);
             }
         });
@@ -103,7 +356,7 @@ jQuery(document).ready(function ($) {
                     link.download = response.data.filename;
                     link.click();
 
-                    alert(response.data.message);
+                    showNotification(response.data.message, 'success', false);
                 }
                 btn.prop('disabled', false);
             }
@@ -137,10 +390,9 @@ jQuery(document).ready(function ($) {
             },
             success: function (response) {
                 if (response.success) {
-                    alert(response.data.message);
-                    window.location.href = response.data.redirect;
+                    showNotification(response.data.message, 'success', true);
                 } else {
-                    alert(response.data.message);
+                    showNotification(response.data.message, 'error', false);
                 }
             }
         });
@@ -239,417 +491,126 @@ jQuery(document).ready(function ($) {
     /***************************************************/
 });
 
+function handleFavoriteToggle(btn) {
+    var propertyId = btn.getAttribute('data-property-id');
+    var heartIcon = btn.querySelector('.fa-heart');
 
-/**
- * Property Manager Pro - Map Functionality
- */
+    if (!propertyId) return;
 
-(function ($) {
-    'use strict';
+    btn.disabled = true;
 
-    // Property Map Handler
-    const PropertyMap = {
-        map: null,
-        markers: [],
-        markerClusterGroup: null,
-
-        /**
-         * Initialize map view
-         */
-        init: function () {
-            const $mapContainer = $('#properties-map');
-
-            if ($mapContainer.length === 0 || typeof L === 'undefined') {
-                return;
-            }
-
-            this.initializeMap($mapContainer);
-        },
-
-        /**
-         * Initialize Leaflet map
-         */
-        initializeMap: function ($container) {
-            const propertiesData = $container.data('properties');
-
-            if (!propertiesData || propertiesData.length === 0) {
-                this.showNoPropertiesMessage($container);
-                return;
-            }
-
-            // Create map centered on first property or default location
-            const centerLat = propertiesData[0].latitude || 37.8;
-            const centerLng = propertiesData[0].longitude || -0.8;
-
-            this.map = L.map('properties-map').setView([centerLat, centerLng], 10);
-
-            // Add OpenStreetMap tile layer (free)
-            L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-                attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors',
-                maxZoom: 19
-            }).addTo(this.map);
-
-            // Add property markers
-            this.addPropertyMarkers(propertiesData);
-
-            // Fit map bounds to show all markers
-            if (this.markers.length > 0) {
-                const group = new L.featureGroup(this.markers);
-                this.map.fitBounds(group.getBounds().pad(0.1));
-            }
-
-            // Fix map display issue when container is initially hidden
-            setTimeout(() => {
-                this.map.invalidateSize();
-            }, 100);
-        },
-
-        /**
-         * Add property markers to map
-         */
-        addPropertyMarkers: function (properties) {
-            const self = this;
-
-            properties.forEach(function (property) {
-                if (!property.latitude || !property.longitude) {
-                    return;
-                }
-
-                // Create custom icon for property markers
-                const propertyIcon = L.divIcon({
-                    className: 'custom-property-marker',
-                    html: '<div class="marker-pin"><i class="fas fa-home"></i></div>',
-                    iconSize: [40, 40],
-                    iconAnchor: [20, 40],
-                    popupAnchor: [0, -40]
-                });
-
-                // Create marker
-                const marker = L.marker([property.latitude, property.longitude], {
-                    icon: propertyIcon,
-                    title: property.title
-                });
-
-                // Create popup content
-                const popupContent = self.createPopupContent(property);
-                marker.bindPopup(popupContent, {
-                    maxWidth: 300,
-                    className: 'property-popup'
-                });
-
-                // Add marker to map and store reference
-                marker.addTo(self.map);
-                self.markers.push(marker);
-
-                // Handle marker click to highlight property card if in list/grid view
-                marker.on('click', function () {
-                    self.highlightProperty(property.id);
-                });
-            });
-        },
-
-        /**
-         * Create popup content for property marker
-         */
-        createPopupContent: function (property) {
-            let html = '<div class="property-map-popup">';
-
-            // Property image
-            if (property.image) {
-                html += '<div class="popup-image">';
-                html += '<img src="' + this.escapeHtml(property.image) + '" alt="' + this.escapeHtml(property.title) + '">';
-                html += '</div>';
-            }
-
-            // Property details
-            html += '<div class="popup-content">';
-            html += '<h6 class="popup-title">' + this.escapeHtml(property.title) + '</h6>';
-
-            // Property features
-            if (property.beds || property.baths) {
-                html += '<div class="popup-features">';
-                if (property.beds) {
-                    html += '<span><i class="fas fa-bed"></i> ' + property.beds + '</span>';
-                }
-                if (property.baths) {
-                    html += '<span><i class="fas fa-bath"></i> ' + property.baths + '</span>';
-                }
-                html += '</div>';
-            }
-
-            // Location
-            if (property.town) {
-                html += '<div class="popup-location">';
-                html += '<i class="fas fa-map-marker-alt"></i> ' + this.escapeHtml(property.town);
-                if (property.province) {
-                    html += ', ' + this.escapeHtml(property.province);
-                }
-                html += '</div>';
-            }
-
-            // Price
-            html += '<div class="popup-price">' + this.escapeHtml(property.price) + '</div>';
-
-            // View button
-            html += '<a href="' + this.escapeHtml(property.url) + '" class="btn btn-warning text-white btn-sm mt-3">';
-            html += 'View Details <i class="fas fa-arrow-right"></i>';
-            html += '</a>';
-
-            html += '</div>';
-            html += '</div>';
-
-            return html;
-        },
-
-        /**
-         * Highlight property card when marker is clicked
-         */
-        highlightProperty: function (propertyId) {
-            // Remove previous highlights
-            $('.property-card, .property-list-item').removeClass('highlighted');
-
-            // Add highlight to matching property
-            const $property = $('[data-property-id="' + propertyId + '"]').closest('.property-card, .property-list-item');
-            if ($property.length) {
-                $property.addClass('highlighted');
-
-                // Scroll to property if not in viewport
-                if (!this.isInViewport($property[0])) {
-                    $('html, body').animate({
-                        scrollTop: $property.offset().top - 100
-                    }, 500);
-                }
-
-                // Remove highlight after 3 seconds
-                setTimeout(function () {
-                    $property.removeClass('highlighted');
-                }, 3000);
-            }
-        },
-
-        /**
-         * Check if element is in viewport
-         */
-        isInViewport: function (element) {
-            const rect = element.getBoundingClientRect();
-            return (
-                rect.top >= 0 &&
-                rect.left >= 0 &&
-                rect.bottom <= (window.innerHeight || document.documentElement.clientHeight) &&
-                rect.right <= (window.innerWidth || document.documentElement.clientWidth)
-            );
-        },
-
-        /**
-         * Show message when no properties with coordinates
-         */
-        showNoPropertiesMessage: function ($container) {
-            $container.html(
-                '<div class="alert alert-info">' +
-                '<i class="fas fa-info-circle"></i> ' +
-                'No properties with valid coordinates to display on map.' +
-                '</div>'
-            );
-        },
-
-        /**
-         * Escape HTML to prevent XSS
-         */
-        escapeHtml: function (text) {
-            if (!text) return '';
-            const map = {
-                '&': '&amp;',
-                '<': '&lt;',
-                '>': '&gt;',
-                '"': '&quot;',
-                "'": '&#039;'
-            };
-            return String(text).replace(/[&<>"']/g, function (m) {
-                return map[m];
-            });
-        }
-    };
-
-    // Initialize map when document is ready
-    $(document).ready(function () {
-        PropertyMap.init();
-
-        // Reinitialize map if view is switched to map
-        $(document).on('click', '.view-switcher a[href*="view=map"]', function () {
-            setTimeout(function () {
-                if ($('#properties-map').length) {
-                    PropertyMap.init();
-                }
-            }, 200);
-        });
-    });
-
-    // Make PropertyMap globally accessible if needed
-    window.PropertyMap = PropertyMap;
-})(jQuery);
-
-
-
-document.addEventListener('DOMContentLoaded', function () {
-    document.addEventListener('click', function (e) {
-        if (e.target.closest('.favorite-btn')) {
-            e.preventDefault();
-            handleFavoriteToggle(e.target.closest('.favorite-btn'));
-        }
-
-        if (e.target.closest('.remove-favorite-btn')) {
-            e.preventDefault();
-            handleFavoriteRemove(e.target.closest('.remove-favorite-btn'));
-        }
-    });
-
-    function handleFavoriteToggle(btn) {
-        var propertyId = btn.getAttribute('data-property-id');
-        var heartIcon = btn.querySelector('.dashicons-heart');
-
-        if (!propertyId) return;
-
-        btn.disabled = true;
-
-        fetch(property_manager_ajax.ajax_url, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-            body: new URLSearchParams({
-                action: 'toggle_property_favorite',
-                property_id: propertyId,
-                nonce: property_manager_ajax.nonce
-            })
+    fetch(property_manager_ajax.ajax_url, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+        body: new URLSearchParams({
+            action: 'toggle_property_favorite',
+            property_id: propertyId,
+            nonce: property_manager_ajax.nonce
         })
-            .then(response => response.json())
-            .then(data => {
-                if (data.success) {
-                    if (data.data.is_favorite) {
-                        heartIcon.classList.add('favorited');
-                        btn.classList.add('favorited');
-                    } else {
-                        heartIcon.classList.remove('favorited');
-                        btn.classList.remove('favorited');
-                    }
-                    showNotification(data.data.message, 'success');
+    })
+        .then(response => response.json())
+        .then(data => {
+            if (data.success) {
+                if (data.data.is_favorite) {
+                    heartIcon.classList.add('favorited');
+                    btn.classList.add('favorited');
                 } else {
-                    if (data.data && data.data.login_required) {
-                        if (confirm('<?php esc_js(_e('You need to be logged in to save favorites.Would you like to login now ? ', 'property - manager - pro')); ?>')) {
-                            window.location.href = '<?php echo wp_login_url(); ?>';
-                        }
-                    } else {
-                        showNotification(data.data ? data.data.message : 'Error occurred', 'error');
-                    }
+                    heartIcon.classList.remove('favorited');
+                    btn.classList.remove('favorited');
                 }
-            })
-            .catch(error => showNotification('An error occurred. Please try again.', 'error'))
-            .finally(() => { btn.disabled = false; });
-    }
-
-    function handleFavoriteRemove(btn) {
-        var propertyId = btn.getAttribute('data-property-id');
-        var propertyCard = btn.closest('.favorite-property-card');
-
-        if (!propertyId) return;
-
-        if (!confirm('<?php esc_js(_e('Are you sure you want to remove this property from your favorites ? ', 'property - manager - pro')); ?>')) {
-            return;
-        }
-
-        btn.disabled = true;
-
-        fetch(property_manager_ajax.ajax_url, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-            body: new URLSearchParams({
-                action: 'remove_property_favorite',
-                property_id: propertyId,
-                nonce: property_manager_ajax.nonce
-            })
+                showNotification(data.data.message, 'success', false);
+            } else {
+                if (data.data && data.data.login_required) {
+                    if (confirm('You need to be logged in to save favorites. Would you like to login now?')) {
+                        window.location.href = '/';
+                    }
+                } else {
+                    showNotification(data.data ? data.data.message : 'Error occurred', 'error', false);
+                }
+            }
         })
-            .then(response => response.json())
-            .then(data => {
-                if (data.success) {
-                    if (propertyCard) {
-                        propertyCard.style.transition = 'opacity 0.3s ease, transform 0.3s ease';
-                        propertyCard.style.opacity = '0';
-                        propertyCard.style.transform = 'scale(0.95)';
-
-                        setTimeout(() => {
-                            var col = propertyCard.closest('.col-lg-4, .col-md-6, .col-12');
-                            if (col) { col.remove(); } else { propertyCard.remove(); }
-                        }, 300);
-                    }
-                    showNotification(data.data.message, 'success');
-                } else {
-                    showNotification(data.data ? data.data.message : 'Error occurred', 'error');
-                }
-            })
-            .catch(error => showNotification('An error occurred. Please try again.', 'error'))
-            .finally(() => { btn.disabled = false; });
-    }
-
-    function showNotification(message, type) {
-        var notification = document.createElement('div');
-        notification.className = 'property-notification ' + type;
-        notification.textContent = message;
-
-        Object.assign(notification.style, {
-            position: 'fixed',
-            top: '20px',
-            right: '20px',
-            padding: '15px 20px',
-            borderRadius: '5px',
-            color: 'white',
-            fontWeight: 'bold',
-            zIndex: '9999',
-            opacity: '0',
-            transform: 'translateY(-20px)',
-            transition: 'all 0.3s ease',
-            backgroundColor: type === 'success' ? '#28a745' : '#dc3545'
-        });
-
-        document.body.appendChild(notification);
-
-        setTimeout(() => {
-            notification.style.opacity = '1';
-            notification.style.transform = 'translateY(0)';
-        }, 100);
-
-        setTimeout(() => {
-            notification.style.opacity = '0';
-            notification.style.transform = 'translateY(-20px)';
-            setTimeout(() => {
-                if (notification.parentNode) {
-                    notification.parentNode.removeChild(notification);
-                }
-            }, 300);
-        }, 3000);
-    }
-});
-
-function removeFilter(key, value = null) {
-    var url = new URL(window.location);
-    if (value) {
-        // Handle array parameters
-        var values = url.searchParams.getAll(key + '[]');
-        values = values.filter(v => v !== value);
-        url.searchParams.delete(key + '[]');
-        values.forEach(v => url.searchParams.append(key + '[]', v));
-    } else {
-        url.searchParams.delete(key);
-    }
-    window.location = url.toString();
+        .catch(error => showNotification('An error occurred. Please try again.' + error, 'error', false))
+        .finally(() => { btn.disabled = false; });
 }
 
-function clearAllFilters() {
-    var url = new URL(window.location);
-    // Keep only essential parameters
-    var keep = ['page_id', 'pagename'];
-    var newUrl = new URL(url.origin + url.pathname);
-    keep.forEach(param => {
-        if (url.searchParams.has(param)) {
-            newUrl.searchParams.set(param, url.searchParams.get(param));
-        }
+function handleFavoriteRemove(btn) {
+    var propertyId = btn.getAttribute('data-property-id');
+    var propertyCard = btn.closest('.favorite-property-card');
+
+    if (!propertyId) return;
+
+    if (!confirm('Are you sure you want to remove this property from your favorites?')) {
+        return;
+    }
+
+    btn.disabled = true;
+
+    fetch(property_manager_ajax.ajax_url, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+        body: new URLSearchParams({
+            action: 'remove_property_favorite',
+            property_id: propertyId,
+            nonce: property_manager_ajax.nonce
+        })
+    })
+        .then(response => response.json())
+        .then(data => {
+            if (data.success) {
+                if (propertyCard) {
+                    propertyCard.style.transition = 'opacity 0.3s ease, transform 0.3s ease';
+                    propertyCard.style.opacity = '0';
+                    propertyCard.style.transform = 'scale(0.95)';
+
+                    setTimeout(() => {
+                        var col = propertyCard.closest('.col-lg-4, .col-md-6, .col-12');
+                        if (col) { col.remove(); } else { propertyCard.remove(); }
+                    }, 300);
+                }
+                showNotification(data.data.message, 'success', false);
+            } else {
+                showNotification(data.data ? data.data.message : 'Error occurred', 'error', false);
+            }
+        })
+        .catch(error => showNotification('An error occurred. Please try again.', 'error', false))
+        .finally(() => { btn.disabled = false; });
+}
+
+function showNotification(message, type, reload) {
+    var notification = document.createElement('div');
+    notification.className = 'property-notification ' + type;
+    notification.textContent = message;
+
+    Object.assign(notification.style, {
+        position: 'fixed',
+        top: '20px',
+        right: '20px',
+        padding: '15px 20px',
+        borderRadius: '5px',
+        color: 'white',
+        fontWeight: 'bold',
+        zIndex: '9999',
+        opacity: '0',
+        transform: 'translateY(-20px)',
+        transition: 'all 0.3s ease',
+        backgroundColor: type === 'success' ? '#28a745' : '#dc3545'
     });
-    window.location = newUrl.toString();
+
+    document.body.appendChild(notification);
+
+    setTimeout(() => {
+        notification.style.opacity = '1';
+        notification.style.transform = 'translateY(0)';
+    }, 100);
+
+    setTimeout(() => {
+        notification.style.opacity = '0';
+        notification.style.transform = 'translateY(-20px)';
+        setTimeout(() => {
+            if (notification.parentNode) {
+                notification.parentNode.removeChild(notification);
+                if (reload) location.reload();
+            }
+        }, 300);
+    }, 3000);
 }

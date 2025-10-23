@@ -16,6 +16,8 @@ class PropertyManager_UserManager {
     
     private static $instance = null;
     
+    private $enable_user_registration = false;
+    
     // Rate limiting settings
     private $rate_limit_attempts = 5;
     private $rate_limit_window = 3600; // 1 hour
@@ -79,17 +81,8 @@ class PropertyManager_UserManager {
      * Initialize user management
      */
     public function init_user_management() {
-        $this->maybe_enable_registration();
         $this->add_user_rewrite_rules();
         $this->cleanup_expired_tokens();
-    }
-    
-    /**
-     * Maybe enable user registration
-     */
-    private function maybe_enable_registration() {
-        $options = get_option('property_manager_options', array());
-        $enable_registration = isset($options['enable_user_registration']) ? $options['enable_user_registration'] : true;
     }
     
     /**

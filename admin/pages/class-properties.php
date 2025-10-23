@@ -333,6 +333,10 @@ class PropertyManager_Admin_Properties {
                         <?php else: ?>
                             <?php foreach ($properties as $property): ?>
                                 <?php
+
+                                $options = get_option('property_manager_options', array());
+                                $currency_symbol = isset($options['currency_symbol']) ? $options['currency_symbol'] : "";
+
                                 // Prepare property data
                                 $property_id = intval($property->id);
                                 $property_ref = esc_html($property->ref);
@@ -340,7 +344,7 @@ class PropertyManager_Admin_Properties {
                                 $property_type = esc_html($property->property_type);
                                 $property_town = esc_html($property->town);
                                 $property_province = esc_html($property->province);
-                                $property_price = !empty($property->price) ? ($property->currency == "EUR" ? "&euro;" : "") . number_format_i18n(floatval($property->price)) : '-';
+                                $property_price = !empty($property->price) ? ($property->currency == "EUR" ? "&euro;" : $currency_symbol) . number_format_i18n(floatval($property->price)) : '-';
                                 $property_beds = !empty($property->beds) ? intval($property->beds) : '-';
                                 $property_baths = !empty($property->baths) ? intval($property->baths) : '-';
                                 $property_status = esc_html($property->status);

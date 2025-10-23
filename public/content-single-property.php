@@ -30,9 +30,10 @@ if ($user_id) {
 }
 
 // Get settings
-$options = get_option('property_manager_settings', array());
+$options = get_option('property_manager_options', array());
 $enable_map = isset($options['enable_map']) ? $options['enable_map'] : true;
 $map_provider = isset($options['map_provider']) ? $options['map_provider'] : 'openstreetmap';
+$currency_symbol = isset($options['currency_symbol']) ? $options['currency_symbol'] : "";
 
 // Get description based on current locale
 $current_locale = get_locale();
@@ -111,7 +112,7 @@ if (strpos($current_locale, 'es') !== false && !empty($property->desc_es)) {
                 <div class="col-md-4 text-md-end">
                     <div class="property-price mb-3">
                         <span class="price-amount h2 text-primary mb-0">
-                            <?php echo esc_html($property->currency == "EUR" ? "&euro;" : ""); ?> 
+                            <?php echo esc_html($property->currency == "EUR" ? "&euro;" : $currency_symbol); ?> 
                             <?php echo number_format($property->price, 0, '.', ','); ?>
                         </span>
                         <?php if ($property->price_freq === 'rent'): ?>

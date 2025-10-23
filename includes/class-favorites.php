@@ -14,6 +14,8 @@ class PropertyManager_Favorites {
     
     private static $instance = null;
 
+    private $enable_user_registration = false;
+
     public static function get_instance() {
         if (null === self::$instance) {
             self::$instance = new self();
@@ -22,15 +24,58 @@ class PropertyManager_Favorites {
     }
 
     private function __construct() {
+        $options = get_option('property_manager_options', array());
+        $this->enable_user_registration = isset($options['enable_user_registration']) ? boolval($options['enable_user_registration']) : false;
+        
+        add_action('init', array($this, 'init_tmp_user'));
         add_action('wp_ajax_toggle_property_favorite', array($this, 'ajax_toggle_favorite'));
         add_action('wp_ajax_nopriv_toggle_property_favorite', array($this, 'ajax_toggle_favorite'));
         add_action('wp_ajax_remove_property_favorite', array($this, 'ajax_remove_favorite'));
         add_action('wp_ajax_get_user_favorites', array($this, 'ajax_get_user_favorites'));
     }
 
+    public function get_current_tmp_user_id() {
+        // If registration is enabled, skip temp user handling
+        if ($this->enable_user_registration) {
+            return null;
+        }
+
+        // If cookie already exists, return it
+        if (isset($_COOKIE['tmp_user_id']) && !empty($_COOKIE['tmp_user_id'])) {
+            return sanitize_text_field($_COOKIE['tmp_user_id']);
+        }
+        return null;
+    }
+
+
+    public function init_tmp_user() {
+        if ($this->enable_user_registration || headers_sent() || (isset($_COOKIE['tmp_user_id']) && !empty($_COOKIE['tmp_user_id'])))
+            return;
+
+        // Generate new temp ID
+        $tmp_id = wp_generate_uuid4();
+
+        // Define defaults if constants not available
+        $day_in_seconds = defined('DAY_IN_SECONDS') ? DAY_IN_SECONDS : 86400;
+        $cookie_path    = defined('COOKIEPATH') ? COOKIEPATH : '/';
+        $cookie_domain  = defined('COOKIE_DOMAIN') ? COOKIE_DOMAIN : '';
+
+        // Set cookie for 30 days
+        setcookie(
+            'tmp_user_id',
+            $tmp_id,
+            time() + (30 * $day_in_seconds),
+            $cookie_path,
+            $cookie_domain,
+            is_ssl(), // secure flag
+            true      // httpOnly
+        );
+    }
+
+
     public function toggle_favorite($property_id, $user_id = null) {
         if (!$user_id) {
-            if (!is_user_logged_in()) {
+            if (!is_user_logged_in() && $this->enable_user_registration) {
                 return new WP_Error('not_logged_in', __('You must be logged in to save favorites.', 'property-manager-pro'));
             }
             $user_id = get_current_user_id();
@@ -47,15 +92,16 @@ class PropertyManager_Favorites {
         $table = PropertyManager_Database::get_table_name('user_favorites');
     
         $existing = $wpdb->get_row($wpdb->prepare(
-            "SELECT id FROM $table WHERE user_id = %d AND property_id = %d",
-            $user_id, $property_id
+            "SELECT id FROM $table WHERE user_id = %d AND tmp_user_id = %s AND property_id = %d",
+            $user_id, $this->get_current_tmp_user_id(), $property_id
         ));
     
         if ($existing) {
             $result = $wpdb->delete($table, array(
                 'user_id' => $user_id,
+                'tmp_user_id' => $this->get_current_tmp_user_id(),
                 'property_id' => $property_id
-            ), array('%d', '%d'));
+            ), array('%d', '%s', '%d'));
         
             if ($result !== false) {
                 return array(
@@ -69,9 +115,10 @@ class PropertyManager_Favorites {
         } else {
             $result = $wpdb->insert($table, array(
                 'user_id' => $user_id,
+                'tmp_user_id' => $this->get_current_tmp_user_id(),
                 'property_id' => $property_id,
                 'created_at' => current_time('mysql')
-            ), array('%d', '%d', '%s'));
+            ), array('%d', '%s', '%d', '%s'));
         
             if ($result !== false) {
                 return array(
@@ -87,7 +134,7 @@ class PropertyManager_Favorites {
 
     public function is_favorite($property_id, $user_id = null) {
         if (!$user_id) {
-            if (!is_user_logged_in()) {
+            if (!is_user_logged_in() && $this->enable_user_registration) {
                 return false;
             }
             $user_id = get_current_user_id();
@@ -97,8 +144,8 @@ class PropertyManager_Favorites {
         $table = PropertyManager_Database::get_table_name('user_favorites');
     
         $exists = $wpdb->get_var($wpdb->prepare(
-            "SELECT COUNT(*) FROM $table WHERE user_id = %d AND property_id = %d",
-            $user_id, $property_id
+            "SELECT COUNT(*) FROM $table WHERE user_id = %d AND tmp_user_id = %s AND property_id = %d",
+            $user_id, $this->get_current_tmp_user_id(), $property_id
         ));
     
         return (bool) $exists;
@@ -106,12 +153,12 @@ class PropertyManager_Favorites {
 
     public function get_user_favorites($user_id = null, $args = array()) {
         if (!$user_id) {
-            if (!is_user_logged_in()) {
+            if (!is_user_logged_in() && $this->enable_user_registration) {
                 return array('properties' => array(), 'total' => 0);
-            }
+            } 
             $user_id = get_current_user_id();
         }
-    
+        
         $defaults = array(
             'page' => 1,
             'per_page' => 20,
@@ -148,12 +195,12 @@ class PropertyManager_Favorites {
     
         $offset = ($args['page'] - 1) * $args['per_page'];
     
-        $total_sql = "SELECT COUNT(*) FROM $favorites_table f INNER JOIN $properties_table p ON f.property_id = p.id WHERE f.user_id = %d AND p.status = 'active'";
-        $total = $wpdb->get_var($wpdb->prepare($total_sql, $user_id));
+        $total_sql = "SELECT COUNT(*) FROM $favorites_table f INNER JOIN $properties_table p ON f.property_id = p.id WHERE f.user_id = %d AND f.tmp_user_id = %s AND p.status = 'active'";
+        $total = $wpdb->get_var($wpdb->prepare($total_sql, $user_id, $this->get_current_tmp_user_id()));
     
-        $properties_sql = "SELECT p.*, f.created_at as favorited_at FROM $favorites_table f INNER JOIN $properties_table p ON f.property_id = p.id WHERE f.user_id = %d AND p.status = 'active' ORDER BY $orderby_sql LIMIT %d OFFSET %d";
+        $properties_sql = "SELECT p.*, f.created_at as favorited_at FROM $favorites_table f INNER JOIN $properties_table p ON f.property_id = p.id WHERE f.user_id = %d AND f.tmp_user_id = %s AND p.status = 'active' ORDER BY $orderby_sql LIMIT %d OFFSET %d";
     
-        $properties = $wpdb->get_results($wpdb->prepare($properties_sql, $user_id, $args['per_page'], $offset));
+        $properties = $wpdb->get_results($wpdb->prepare($properties_sql, $user_id, $this->get_current_tmp_user_id(), $args['per_page'], $offset));
     
         $property_manager = PropertyManager_Property::get_instance();
         foreach ($properties as &$property) {
@@ -172,7 +219,7 @@ class PropertyManager_Favorites {
 
     public function get_favorites_count($user_id = null) {
         if (!$user_id) {
-            if (!is_user_logged_in()) {
+            if (!is_user_logged_in() && $this->enable_user_registration) {
                 return 0;
             }
             $user_id = get_current_user_id();
@@ -183,14 +230,14 @@ class PropertyManager_Favorites {
         $properties_table = PropertyManager_Database::get_table_name('properties');
     
         return $wpdb->get_var($wpdb->prepare(
-            "SELECT COUNT(*) FROM $favorites_table f INNER JOIN $properties_table p ON f.property_id = p.id WHERE f.user_id = %d AND p.status = 'active'",
-            $user_id
+            "SELECT COUNT(*) FROM $favorites_table f INNER JOIN $properties_table p ON f.property_id = p.id WHERE f.user_id = %d AND f.tmp_user_id = %s AND p.status = 'active'",
+            $user_id, $this->get_current_tmp_user_id()
         ));
     }
 
     public function remove_favorite($property_id, $user_id = null) {
         if (!$user_id) {
-            if (!is_user_logged_in()) {
+            if (!is_user_logged_in() && $this->enable_user_registration) {
                 return new WP_Error('not_logged_in', __('You must be logged in to manage favorites.', 'property-manager-pro'));
             }
             $user_id = get_current_user_id();
@@ -201,6 +248,7 @@ class PropertyManager_Favorites {
     
         $result = $wpdb->delete($table, array(
             'user_id' => $user_id,
+            'tmp_user_id' => $this->get_current_tmp_user_id(),
             'property_id' => $property_id
         ), array('%d', '%d'));
     
@@ -213,7 +261,7 @@ class PropertyManager_Favorites {
 
     public function clear_all_favorites($user_id = null) {
         if (!$user_id) {
-            if (!is_user_logged_in()) {
+            if (!is_user_logged_in() && $this->enable_user_registration) {
                 return new WP_Error('not_logged_in', __('You must be logged in to manage favorites.', 'property-manager-pro'));
             }
             $user_id = get_current_user_id();
@@ -222,8 +270,7 @@ class PropertyManager_Favorites {
         global $wpdb;
         $table = PropertyManager_Database::get_table_name('user_favorites');
     
-        $result = $wpdb->delete($table, array('user_id' => $user_id), array('%d'));
-    
+        $result = $wpdb->delete($table, array('user_id' => $user_id, 'tmp_user_id' => $this->get_current_tmp_user_id()), array('%d', '%s'));
         if ($result !== false) {
             return $result;
         } else {
@@ -260,7 +307,7 @@ class PropertyManager_Favorites {
             wp_send_json_error(array('message' => __('Invalid property ID.', 'property-manager-pro')));
         }
     
-        if (!is_user_logged_in()) {
+        if (!is_user_logged_in() && $this->enable_user_registration) {
             wp_send_json_error(array(
                 'message' => __('Please login to save favorites.', 'property-manager-pro'),
                 'login_required' => true
@@ -297,7 +344,7 @@ class PropertyManager_Favorites {
     }
 
     public function ajax_get_user_favorites() {
-        if (!is_user_logged_in()) {
+        if (!is_user_logged_in() && $this->enable_user_registration) {
             wp_send_json_error(array('message' => __('You must be logged in to view favorites.', 'property-manager-pro')));
         }
     

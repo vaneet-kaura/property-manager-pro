@@ -437,6 +437,9 @@ class PropertyManager_Admin {
             'changes' => array_keys($input)
         ));
         
+        $sanitized['enable_user_registration'] = false;
+        $sanitized['currency_symbol'] = "&euro;";
+        $sanitized['default_language'] = "en";
         return $sanitized;
     }
     
