@@ -82,7 +82,6 @@ class PropertyManager_Public {
         
         // Check if headers already sent
         if (headers_sent()) {
-            error_log('Property Manager Pro: Cannot start session - headers already sent');
             return;
         }
         

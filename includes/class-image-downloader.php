@@ -56,7 +56,7 @@ class PropertyManager_ImageDownloader {
     
     private function __construct() {
         $this->upload_dir = wp_upload_dir();
-        $this->max_file_size = 10 * 1024 * 1024; // 10MB
+        $this->max_file_size = 55 * 1024 * 1024; // 55MB
         $this->allowed_types = array(
             'image/jpeg',
             'image/jpg', 
@@ -65,7 +65,7 @@ class PropertyManager_ImageDownloader {
             'image/webp'
         );
         $this->min_dimensions = array('width' => 50, 'height' => 50);
-        $this->max_dimensions = array('width' => 10000, 'height' => 10000);
+        $this->max_dimensions = array('width' => 12000, 'height' => 12000);
         
         // Hook into cron for background processing
         add_action('property_manager_process_images', array($this, 'process_pending_images_cron'));
@@ -319,7 +319,7 @@ class PropertyManager_ImageDownloader {
         }
         
         if ($file_size > $this->max_file_size) {
-            throw new Exception('Image file too large: ' . size_format($file_size));
+            throw new Exception('Image file too large - '.$file_path.' - ' . size_format($file_size));
         }
         
         // Get image info

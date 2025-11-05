@@ -3,10 +3,11 @@
     "",
     "\\admin",
     "\\admin\\pages",
+    "\\assets",
     "\\assets\\css",
     "\\assets\\js",
-    "\\includes"
+    "\\includes",
+    "\\public"
   ],
-  "SelectedNode": "\\includes\\class-feed-importer.php",
   "PreviewInSolutionExplorer": false
 }
